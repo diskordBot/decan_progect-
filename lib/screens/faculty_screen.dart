@@ -256,13 +256,13 @@ class _FacultyScreenState extends State<FacultyScreen> {
     return Scaffold(
       appBar: const CustomAppBar(title: '🎓 Информация о факультете'),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF8F9FF),
-              Color(0xFFE8F4FF),
+              Theme.of(context).colorScheme.background,
+              Theme.of(context).colorScheme.surface.withOpacity(0.5),
             ],
           ),
         ),
@@ -311,21 +311,6 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         color: Colors.white.withOpacity(0.9),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Icon(Icons.star_rate_rounded, color: Colors.amber, size: 16),
-                        SizedBox(width: 4),
-                        Text(
-                          'Современное образование в IT-сфере',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
@@ -333,7 +318,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
               const SizedBox(height: 24),
 
               // Разделитель
-              _buildSectionDivider('📚 Кафедры факультета'),
+              _buildSectionDivider(context, '📚 Кафедры факультета'),
 
               const SizedBox(height: 16),
 
@@ -341,7 +326,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
               ..._departments.asMap().entries.map((entry) {
                 final index = entry.key;
                 final department = entry.value;
-                return _buildDepartmentCard(department, index);
+                return _buildDepartmentCard(context, department, index);
               }),
 
               const SizedBox(height: 32),
@@ -350,29 +335,29 @@ class _FacultyScreenState extends State<FacultyScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppColors.primary.withOpacity(0.2),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                   ),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
                     Text(
                       '🌟 Будущее начинается здесь',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'Присоединяйтесь к нашему факультету и станьте частью IT-будущего!',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textDark,
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                   ],
@@ -385,12 +370,12 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildSectionDivider(String title) {
+  Widget _buildSectionDivider(BuildContext context, String title) {
     return Row(
       children: [
         Expanded(
           child: Divider(
-            color: AppColors.primary.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             thickness: 1,
           ),
         ),
@@ -398,16 +383,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: AppColors.primary,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
         Expanded(
           child: Divider(
-            color: AppColors.primary.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             thickness: 1,
           ),
         ),
@@ -415,7 +400,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildDepartmentCard(Department department, int departmentIndex) {
+  Widget _buildDepartmentCard(BuildContext context, Department department, int departmentIndex) {
     final isDepartmentExpanded = _expandedDepartmentIndex == departmentIndex;
 
     return Container(
@@ -454,8 +439,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.primary.withOpacity(0.15),
-                  AppColors.accent.withOpacity(0.08),
+                  Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                  Theme.of(context).colorScheme.secondary.withOpacity(0.08),
                 ],
               )
                   : null,
@@ -503,16 +488,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                     Expanded(
                       child: Text(
                         department.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
                     ),
                     Icon(
                       isDepartmentExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       size: 28,
                     ),
                   ],
@@ -531,10 +516,11 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       const SizedBox(height: 20),
 
                       // Разделитель
-                      _buildMiniDivider(),
+                      _buildMiniDivider(context),
 
                       // Адрес
                       _buildInfoItem(
+                        context,
                         '📍',
                         'Адрес',
                         department.address,
@@ -544,6 +530,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
 
                       // Руководитель
                       _buildInfoItem(
+                        context,
                         '👨‍🏫',
                         'Руководитель',
                         department.head,
@@ -555,17 +542,17 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withOpacity(0.1),
+                          color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: AppColors.accent.withOpacity(0.2),
+                            color: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
                           ),
                         ),
                         child: Text(
                           department.description,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
-                            color: AppColors.textDark,
+                            color: Theme.of(context).colorScheme.onBackground,
                             height: 1.5,
                           ),
                         ),
@@ -574,26 +561,26 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       const SizedBox(height: 20),
 
                       // Контакты
-                      _buildContactInfo(department),
+                      _buildContactInfo(context, department),
 
                       const SizedBox(height: 24),
 
                       // Разделитель
-                      _buildMiniDivider(),
+                      _buildMiniDivider(context),
 
                       const SizedBox(height: 16),
 
                       // Направления подготовки
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.school, color: AppColors.primary, size: 20),
-                          SizedBox(width: 8),
+                          Icon(Icons.school, color: Theme.of(context).colorScheme.primary, size: 20),
+                          const SizedBox(width: 8),
                           Text(
                             '🎯 Направления подготовки:',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
+                              color: Theme.of(context).colorScheme.onBackground,
                             ),
                           ),
                         ],
@@ -603,7 +590,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       ...department.programs.asMap().entries.map((entry) {
                         final programIndex = entry.key;
                         final program = entry.value;
-                        return _buildProgramCard(program, departmentIndex, programIndex);
+                        return _buildProgramCard(context, program, departmentIndex, programIndex);
                       }),
                     ],
                   ),
@@ -616,15 +603,15 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildMiniDivider() {
+  Widget _buildMiniDivider(BuildContext context) {
     return Divider(
-      color: AppColors.primary.withOpacity(0.2),
+      color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
       thickness: 1,
       height: 20,
     );
   }
 
-  Widget _buildProgramCard(Program program, int departmentIndex, int programIndex) {
+  Widget _buildProgramCard(BuildContext context, Program program, int departmentIndex, int programIndex) {
     final isProgramExpanded = _expandedProgramIndex == programIndex &&
         _expandedDepartmentIndex == departmentIndex;
 
@@ -662,8 +649,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.accent.withOpacity(0.15),
-                  AppColors.primary.withOpacity(0.08),
+                  Theme.of(context).colorScheme.secondary.withOpacity(0.15),
+                  Theme.of(context).colorScheme.primary.withOpacity(0.08),
                 ],
               )
                   : null,
@@ -680,18 +667,18 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.15),
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: AppColors.primary.withOpacity(0.3),
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
                         ),
                       ),
                       child: Text(
                         program.code,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
-                          color: AppColors.primary,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ),
@@ -699,16 +686,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                     Expanded(
                       child: Text(
                         program.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
                     ),
                     Icon(
                       isProgramExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       size: 24,
                     ),
                   ],
@@ -730,14 +717,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.05),
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
                           children: [
-                            _buildInfoRow('🎓 Степень:', program.degree),
-                            _buildInfoRow('📅 Форма обучения:', program.form),
-                            _buildInfoRow('⏱️ Продолжительность:', program.duration),
+                            _buildInfoRow(context, '🎓 Степень:', program.degree),
+                            _buildInfoRow(context, '📅 Форма обучения:', program.form),
+                            _buildInfoRow(context, '⏱️ Продолжительность:', program.duration),
                           ],
                         ),
                       ),
@@ -745,16 +732,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       const SizedBox(height: 16),
 
                       // Профили подготовки
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
-                          SizedBox(width: 8),
+                          Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
+                          const SizedBox(width: 8),
                           Text(
                             '📊 Профили подготовки:',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
+                              color: Theme.of(context).colorScheme.onBackground,
                             ),
                           ),
                         ],
@@ -764,7 +751,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       ...program.profiles.asMap().entries.map((entry) {
                         final profileIndex = entry.key;
                         final profile = entry.value;
-                        return _buildProfileCard(profile, departmentIndex, programIndex, profileIndex);
+                        return _buildProfileCard(context, profile, departmentIndex, programIndex, profileIndex);
                       }),
                     ],
                   ),
@@ -777,7 +764,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildProfileCard(ProgramProfile profile, int departmentIndex, int programIndex, int profileIndex) {
+  Widget _buildProfileCard(BuildContext context, ProgramProfile profile, int departmentIndex, int programIndex, int profileIndex) {
     final isProfileExpanded = _expandedProfileIndex == profileIndex &&
         _expandedProgramIndex == programIndex &&
         _expandedDepartmentIndex == departmentIndex;
@@ -808,14 +795,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.primary.withOpacity(0.1),
-                  Colors.white,
+                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  Theme.of(context).colorScheme.surface,
                 ],
               )
                   : null,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.primary.withOpacity(0.1),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
               ),
             ),
             child: Column(
@@ -828,16 +815,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                     Expanded(
                       child: Text(
                         profile.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
+                          color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
                     ),
                     Icon(
                       isProfileExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       size: 20,
                     ),
                   ],
@@ -857,14 +844,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.grey[50],
+                          color: Theme.of(context).colorScheme.surfaceVariant,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           profile.description,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.textDark,
+                            color: Theme.of(context).colorScheme.onBackground,
                             height: 1.4,
                           ),
                         ),
@@ -880,14 +867,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildInfoItem(String emoji, String title, String value) {
+  Widget _buildInfoItem(BuildContext context, String emoji, String title, String value) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.accent.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
         ),
       ),
       child: Row(
@@ -904,18 +891,18 @@ class _FacultyScreenState extends State<FacultyScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
               ],
@@ -926,45 +913,45 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildContactInfo(Department department) {
+  Widget _buildContactInfo(BuildContext context, Department department) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.contacts, color: AppColors.primary, size: 18),
-              SizedBox(width: 8),
+              Icon(Icons.contacts, color: Theme.of(context).colorScheme.primary, size: 18),
+              const SizedBox(width: 8),
               Text(
                 '📞 Контакты:',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
-                  color: AppColors.textDark,
+                  color: Theme.of(context).colorScheme.onBackground,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildContactRow('📱', department.phone),
+          _buildContactRow(context, '📱', department.phone),
           const SizedBox(height: 8),
-          _buildContactRow('📧', department.email),
+          _buildContactRow(context, '📧', department.email),
           const SizedBox(height: 8),
-          _buildContactRow('🌐', department.website),
+          _buildContactRow(context, '🌐', department.website),
         ],
       ),
     );
   }
 
-  Widget _buildContactRow(String emoji, String text) {
+  Widget _buildContactRow(BuildContext context, String emoji, String text) {
     return Row(
       children: [
         Text(emoji, style: const TextStyle(fontSize: 16)),
@@ -972,9 +959,9 @@ class _FacultyScreenState extends State<FacultyScreen> {
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: AppColors.textDark,
+              color: Theme.of(context).colorScheme.onBackground,
             ),
           ),
         ),
@@ -982,7 +969,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -992,9 +979,9 @@ class _FacultyScreenState extends State<FacultyScreen> {
             width: 140,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: AppColors.textDark,
+                color: Theme.of(context).colorScheme.onBackground,
                 fontSize: 14,
               ),
             ),
@@ -1002,8 +989,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: AppColors.textDark,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onBackground,
                 fontSize: 14,
               ),
             ),

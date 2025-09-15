@@ -17,6 +17,7 @@ dependencies:
   curved_navigation_bar: ^1.0.6
   webview_flutter: ^4.13.0
   shared_preferences: ^2.5.3
+  video_player: ^2.10.0
 
 dev_dependencies:
   flutter_test:
@@ -28,3 +29,4 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/logotiti.mp4

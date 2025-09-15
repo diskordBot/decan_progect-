@@ -23,21 +23,20 @@ class BubbleButton extends StatelessWidget {
         width: 100,
         height: 100,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            // Добавление тени для имитации размытия
             BoxShadow(
-              color: primaryColor.withOpacity(0.2), // Цвет тени с размытием
-              blurRadius: 10, // Степень размытия
-              spreadRadius: 5, // Расстояние, на которое размытая область расширяется
-              offset: const Offset(0, 0), // Тень вокруг контейнера
+              color: primaryColor.withOpacity(0.2),
+              blurRadius: 10,
+              spreadRadius: 5,
+              offset: const Offset(0, 0),
             ),
           ],
           border: Border.all(
             width: 2,
             style: BorderStyle.solid,
-            color: primaryColor, // Основной цвет границы
+            color: primaryColor,
           ),
         ),
         child: Column(
@@ -52,7 +51,7 @@ class BubbleButton extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withOpacity(0.5), // Тень для иконки
+                    color: primaryColor.withOpacity(0.5),
                     blurRadius: 6,
                     offset: const Offset(0, 4),
                   ),
@@ -70,10 +69,10 @@ class BubbleButton extends StatelessWidget {
             // Текст под иконкой
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
+                color: Theme.of(context).colorScheme.onBackground,
               ),
               textAlign: TextAlign.center,
             ),

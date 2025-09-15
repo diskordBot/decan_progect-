@@ -24,8 +24,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Text(
           title,
           key: ValueKey<String>(title),
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
@@ -34,7 +34,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: AppColors.primary,
       centerTitle: true,
       elevation: 4,
-      iconTheme: const IconThemeData(color: Colors.white),
+      iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
       actions: actions,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
@@ -43,7 +43,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       leading: showBackButton
           ? IconButton(
-        icon: const Icon(Icons.arrow_back, size: 24),
+        icon: Icon(Icons.arrow_back, size: 24, color: Theme.of(context).colorScheme.onPrimary),
         onPressed: () => Navigator.of(context).pop(),
       )
           : null,

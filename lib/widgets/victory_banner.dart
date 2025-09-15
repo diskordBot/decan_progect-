@@ -18,31 +18,27 @@ class VictoryBanner extends StatelessWidget {
             offset: const Offset(0, 4),
           ),
         ],
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)), // Скругление снизу
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Изображение с закругленными углами
           ClipRRect(
-            borderRadius: BorderRadius.circular(12), // Скругление углов изображения
+            borderRadius: BorderRadius.circular(12),
             child: Image.asset(
               'assets/images/donnty.png',
               height: 240,
               fit: BoxFit.contain,
             ),
           ),
-
           const SizedBox(height: 8),
-
-          // Текст под изображением
-          const Text(
+          Text(
             'Мы встретили первокурсников!\nДобро пожаловать в ДонНТУ!',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color:Colors.white,
               height: 1.3,
             ),
           ),

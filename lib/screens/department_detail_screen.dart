@@ -33,19 +33,19 @@ class DepartmentDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Кафедра ПМИИ',
           style: TextStyle(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor: AppColors.primary,
         centerTitle: true,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -53,7 +53,7 @@ class DepartmentDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Заголовок с иконкой
-            _buildHeader(),
+            _buildHeader(context),
             const SizedBox(height: 24),
 
             // Контактная информация
@@ -61,18 +61,18 @@ class DepartmentDetailScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Направления подготовки
-            _buildProgramsSection(),
+            _buildProgramsSection(context),
             const SizedBox(height: 24),
 
             // Детальная информация о направлениях
-            _buildProgramDetails(),
+            _buildProgramDetails(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -134,16 +134,16 @@ class DepartmentDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.contact_mail, color: AppColors.primary),
-                SizedBox(width: 8),
+                Icon(Icons.contact_mail, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
                 Text(
                   'Контактная информация',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
               ],
@@ -206,9 +206,9 @@ class DepartmentDetailScreen extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -217,7 +217,7 @@ class DepartmentDetailScreen extends StatelessWidget {
                   child: Text(
                     value,
                     style: TextStyle(
-                      color: onTap != null ? Colors.blue[700] : AppColors.textDark,
+                      color: onTap != null ? Colors.blue[700] : Theme.of(context).colorScheme.onBackground,
                       fontSize: 14,
                       decoration: onTap != null ? TextDecoration.underline : TextDecoration.none,
                     ),
@@ -231,7 +231,7 @@ class DepartmentDetailScreen extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.content_copy, size: 18),
               onPressed: () => _copyToClipboard(copyText, context),
-              color: AppColors.primary,
+              color: Theme.of(context).colorScheme.primary,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
@@ -241,7 +241,7 @@ class DepartmentDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProgramsSection() {
+  Widget _buildProgramsSection(BuildContext context) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -250,43 +250,43 @@ class DepartmentDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.menu_book, color: AppColors.primary),
-                SizedBox(width: 8),
+                Icon(Icons.menu_book, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
                 Text(
                   'Направления подготовки',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _buildProgramItem('01.03.04', 'Прикладная математика (ПМК)', 'Бакалавриат'),
-            _buildProgramItem('01.04.04', 'Прикладная математика (ПМК)', 'Магистратура'),
-            _buildProgramItem('27.03.03', 'Системный анализ и управление (САУ)', 'Бакалавриат'),
-            _buildProgramItem('27.04.03', 'Системный анализ и управление (САУ)', 'Магистратура'),
-            _buildProgramItem('09.03.03', 'Прикладная информатика (ИНФ)', 'Бакалавриат'),
-            _buildProgramItem('09.04.03', 'Прикладная информатика (ИНФ)', 'Магистратура'),
-            _buildProgramItem('09.03.04', 'Программная инженерия (ПИ)', 'Бакалавриат'),
-            _buildProgramItem('09.04.04', 'Программная инженерия (ПИ)', 'Магистратура'),
+            _buildProgramItem(context, '01.03.04', 'Прикладная математика (ПМК)', 'Бакалавриат'),
+            _buildProgramItem(context, '01.04.04', 'Прикладная математика (ПМК)', 'Магистратура'),
+            _buildProgramItem(context, '27.03.03', 'Системный анализ и управление (САУ)', 'Бакалавриат'),
+            _buildProgramItem(context, '27.04.03', 'Системный анализ и управление (САУ)', 'Магистратура'),
+            _buildProgramItem(context, '09.03.03', 'Прикладная информатика (ИНФ)', 'Бакалавриат'),
+            _buildProgramItem(context, '09.04.03', 'Прикладная информатика (ИНФ)', 'Магистратура'),
+            _buildProgramItem(context, '09.03.04', 'Программная инженерия (ПИ)', 'Бакалавриат'),
+            _buildProgramItem(context, '09.04.04', 'Программная инженерия (ПИ)', 'Магистратура'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildProgramItem(String code, String name, String degree) {
+  Widget _buildProgramItem(BuildContext context, String code, String name, String degree) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.05),
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
       ),
       child: Row(
         children: [
@@ -312,15 +312,15 @@ class DepartmentDetailScreen extends StatelessWidget {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
                 Text(
                   degree,
                   style: TextStyle(
-                    color: AppColors.textLight,
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 12,
                   ),
                 ),
@@ -332,29 +332,30 @@ class DepartmentDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProgramDetails() {
+  Widget _buildProgramDetails(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Подробная информация о направлениях',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: AppColors.textDark,
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
         const SizedBox(height: 16),
 
         // Прикладная математика
         _buildProgramDetailCard(
+          context,
           '01.03.04 Прикладная математика',
           [
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Прикладная математика и кибернетика',
                 'Математик-программист – одна из самых популярных профессий. Специалист занимается программированием процессов, которые невозможно смоделировать без знания математики.\n\nОсновное достоинство выпускников – универсальность: они могут работать программистами, дизайнерами, специалистами сетевых технологий, заниматься моделированием систем и процессов, компьютерной рекламой, работать в сфере Интернет-аналитики или информационной безопасности.'
             ),
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Бизнес-аналитика финансовых систем',
                 'Бизнес-аналитик – это высококвалифицированный специалист, который занимается анализом финансового или хозяйственного направления деятельности организации. На кафедре осуществляется подготовка аналитиков, владеющих современными методами интеллектуальной обработки данных для принятия управленческих решений.'
             ),
@@ -363,9 +364,10 @@ class DepartmentDetailScreen extends StatelessWidget {
 
         // Системный анализ
         _buildProgramDetailCard(
+          context,
           '27.03.03 Системный анализ и управление',
           [
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Системный анализ и управление',
                 'Выпускники ориентированы на работу системными аналитиками, выполняют анализ деятельности предприятия и осуществляют совершенствование бизнес-процессов; работают менеджерами проектов; руководят IT-службами предприятий; возглавляют аналитические отделы банков и страховых компаний.'
             ),
@@ -374,17 +376,18 @@ class DepartmentDetailScreen extends StatelessWidget {
 
         // Прикладная информатика
         _buildProgramDetailCard(
+          context,
           '09.03.03 Прикладная информатика',
           [
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Информатика в интеллектуальных системах',
                 'Профиль предусматривает подготовку в области программирования, математического и компьютерного моделирования, проектирования, разработки и использования новейших компьютерных технологий и информационных систем в различных отраслях.'
             ),
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Информационные системы в промышленной инженерии',
                 'Совместная подготовка с факультетом металлургии и теплоэнергетики. Специалисты приобретут знания в области программирования широкого спектра информационных технологий для промышленного сегмента.'
             ),
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Интеллектуальные технологии проектирования',
                 'Совместная подготовка с кафедрой "Горные машины". Выпускники будут не просто программистами, но ещё и специалистами в области проектирования и конструирования мехатронных горных машин.'
             ),
@@ -393,9 +396,10 @@ class DepartmentDetailScreen extends StatelessWidget {
 
         // Программная инженерия
         _buildProgramDetailCard(
+          context,
           '09.03.04 Программная инженерия',
           [
-            _buildProfileDetail(
+            _buildProfileDetail(context,
                 'Искусственный интеллект',
                 'Обучение предполагает освоение теоретических знаний и практических навыков, необходимых для работы программистом в области проектирования и разработки прикладного программного обеспечения и систем искусственного интеллекта. Выпускники могут создавать, сопровождать и тестировать ПО, разрабатывать интернет-приложения, использовать облачные вычисления, решать задачи защиты информации.'
             ),
@@ -405,7 +409,7 @@ class DepartmentDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProgramDetailCard(String title, List<Widget> profiles) {
+  Widget _buildProgramDetailCard(BuildContext context, String title, List<Widget> profiles) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
@@ -417,10 +421,10 @@ class DepartmentDetailScreen extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(height: 12),
@@ -431,30 +435,30 @@ class DepartmentDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileDetail(String title, String description) {
+  Widget _buildProfileDetail(BuildContext context, String title, String description) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: AppColors.textDark,
+              color: Theme.of(context).colorScheme.onBackground,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             description,
-            style: const TextStyle(
-              color: AppColors.textDark,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onBackground,
               fontSize: 14,
             ),
           ),

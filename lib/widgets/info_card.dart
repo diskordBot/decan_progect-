@@ -28,7 +28,7 @@ class InfoCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -37,12 +37,12 @@ class InfoCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     icon,
-                    color: AppColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                     size: 20,
                   ),
                 ),
@@ -53,10 +53,10 @@ class InfoCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textDark,
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                     if (subtitle != null)
@@ -66,17 +66,17 @@ class InfoCard extends StatelessWidget {
                           subtitle!,
                           style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.textLight,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
-                color: AppColors.textLight,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ],
           ),
