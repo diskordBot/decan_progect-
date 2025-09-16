@@ -2,7 +2,6 @@ import 'package:decanat_progect/screens/faculty_screen.dart';
 import 'package:decanat_progect/screens/schedule_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/news_screen.dart';
