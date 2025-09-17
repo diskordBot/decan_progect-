@@ -26,7 +26,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   String _userRole = 'user';
   String? _userId;
-  final String _serverUrl = "http://0.0.0.0:8000";
+  final String _serverUrl = "http://185.72.144.22:8000";
 
   // Для управления вкладками
   late TabController _tabController;

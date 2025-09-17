@@ -369,6 +369,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _copyUserIdToClipboard,
                     tooltip: 'Копировать ID',
                   ),
+                  IconButton(
+                    icon: Icon(Icons.save_rounded, color: Theme.of(context).colorScheme.primary),
+                    onPressed: _startEditingUserId,
+                    tooltip: 'Изменить ID',
+                  ),
                 ]
               ],
             ),
