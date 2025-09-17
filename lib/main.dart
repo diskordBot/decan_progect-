@@ -1,5 +1,6 @@
 import 'package:decanat_progect/screens/faculty_screen.dart';
 import 'package:decanat_progect/screens/schedule_screen.dart';
+import 'package:decanat_progect/teacher/teacher_home_content.dart';
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'screens/home_screen.dart';
@@ -8,6 +9,8 @@ import 'screens/news_screen.dart';
 import 'screens/settings_screen.dart';
 import 'constants.dart';
 import 'widgets/splash_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:decanat_progect/providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,18 +27,22 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Кафедра ПМИИ',
-      theme: _buildDarkTheme(),
-      home: SplashScreen(), // Убрал const
-      routes: {
-        '/home': (context) => const MyHomePage(),
-        '/about': (context) => const AboutScreen(),
-        '/news': (context) => const NewsScreen(),
-        '/settings': (context) => const SettingsScreen(),
-        '/schedule': (context) => const ScheduleScreen(),
-        '/faculty': (context) => const FacultyScreen(),
-      },
+    return ChangeNotifierProvider(
+        create: (context) => AuthProvider(),
+      child: MaterialApp(
+        title: 'Кафедра ПМИИ',
+        theme: _buildDarkTheme(),
+        home: SplashScreen(), // Убрал const
+        routes: {
+          '/home': (context) => const MyHomePage(),
+          '/about': (context) => const AboutScreen(),
+          '/news': (context) => const NewsScreen(),
+          '/settings': (context) => const SettingsScreen(),
+          '/schedule': (context) => const ScheduleScreen(),
+          '/faculty': (context) => const FacultyScreen(),
+          '/teacher': (context) => const TeacherHomeContent(),
+        },
+      ),
     );
   }
 
