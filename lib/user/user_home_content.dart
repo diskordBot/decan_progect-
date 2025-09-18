@@ -17,12 +17,6 @@ class UserHomeContent extends StatelessWidget {
       childAspectRatio: 1.0,
       children: [
         BubbleButton(
-          title: 'Расписание',
-          icon: Icons.schedule,
-          primaryColor: Colors.blue[700]!,
-          onTap: () => Navigator.pushNamed(context, '/schedule'),
-        ),
-        BubbleButton(
           title: 'Факультет',
           icon: Icons.account_balance,
           primaryColor: Colors.green[700]!,

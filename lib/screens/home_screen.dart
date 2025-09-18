@@ -13,7 +13,7 @@ import 'package:decanat_progect/admin/admin_schedule_editor.dart';
 
 // Импортируем файлы для разных ролей
 import 'package:decanat_progect/user/user_home_content.dart';
-import 'package:decanat_progect/user/student_home_content.dart';
+import 'package:decanat_progect/student/student_home_content.dart';
 import 'package:decanat_progect/user/teacher_home_content.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,7 +26,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   String _userRole = 'user';
   String? _userId;
-  final String _serverUrl = "http://185.72.144.22:8000";
+  final String _serverUrl = "http://192.168.0.106:8000";
 
   // Для управления вкладками
   late TabController _tabController;

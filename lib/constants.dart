@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppConfig {
-  static const String serverUrl = "http://185.72.144.22:8000";
+  //static const String serverUrl = "http://185.72.144.22:8000";
   //static const String serverUrl = "http://192.168.0.106:8000";
-// static const String serverUrl = "http://10.0.2.2:8000"; // для Android эмулятора
+  static const String serverUrl = "http://192.168.0.106:8000"; // для Android эмулятора
 }
 
 class AppColors {

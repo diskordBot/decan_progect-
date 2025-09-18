@@ -65,9 +65,9 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
   }
 
   void _sortAndFilterUsers() {
-    // Сначала сортируем по роли: разработчики -> администраторы -> пользователи
+    // Сначала сортируем по роли: разработчики -> администраторы -> студенты -> пользователи
     _users.sort((a, b) {
-      final roleOrder = {'developer': 0, 'admin': 1, 'user': 2};
+      final roleOrder = {'developer': 0, 'admin': 1, 'student': 2, 'user': 3};
       return roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!);
     });
 
@@ -185,6 +185,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return Colors.purple;
       case 'admin': return Colors.blue;
+      case 'student': return Colors.orange; // Оранжевый для студентов
       default: return Colors.green;
     }
   }
@@ -193,7 +194,17 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return 'Разработчик';
       case 'admin': return 'Администратор';
+      case 'student': return 'Студент'; // Русское название для студента
       default: return 'Пользователь';
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'developer': return Icons.developer_mode;
+      case 'admin': return Icons.admin_panel_settings;
+      case 'student': return Icons.school; // Иконка для студента
+      default: return Icons.person;
     }
   }
 
@@ -201,7 +212,8 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return 0;
       case 'admin': return 1;
-      default: return 2;
+      case 'student': return 2;
+      default: return 3;
     }
   }
 
@@ -256,6 +268,10 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                 _buildStatCard('Админы',
                     _filteredUsers.where((u) => u['role'] == 'admin').length,
                     Colors.blue
+                ),
+                _buildStatCard('Студенты',
+                    _filteredUsers.where((u) => u['role'] == 'student').length,
+                    Colors.orange
                 ),
                 _buildStatCard('Пользователи',
                     _filteredUsers.where((u) => u['role'] == 'user').length,
@@ -313,6 +329,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
   Widget _buildUserCard(Map<String, dynamic> user) {
     final isCurrentUser = user['user_id'] == _userId;
     final isSystemDeveloper = user['user_id'] == '000000';
+    final userRole = user['role'];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -328,12 +345,12 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: _getRoleColor(user['role']).withOpacity(0.1),
+                    color: _getRoleColor(userRole).withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Icons.person,
-                    color: _getRoleColor(user['role']),
+                    _getRoleIcon(userRole),
+                    color: _getRoleColor(userRole),
                     size: 20,
                   ),
                 ),
@@ -348,9 +365,9 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       Text(
-                        _getRoleName(user['role']),
+                        _getRoleName(userRole),
                         style: TextStyle(
-                          color: _getRoleColor(user['role']),
+                          color: _getRoleColor(userRole),
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -378,7 +395,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
             if (!isSystemDeveloper)
               Row(
                 children: [
-                  if (user['role'] == 'admin')
+                  if (userRole == 'admin')
                     ElevatedButton(
                       onPressed: () => _removeAdminRole(user['user_id']),
                       style: ElevatedButton.styleFrom(
@@ -389,7 +406,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                       child: const Text('Снять админа'),
                     ),
                   const SizedBox(width: 8),
-                  if (user['role'] == 'user')
+                  if (userRole == 'user' || userRole == 'student')
                     ElevatedButton(
                       onPressed: () => _updateUserRole(user['user_id'], 'admin'),
                       style: ElevatedButton.styleFrom(
@@ -400,7 +417,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                       child: const Text('Сделать админом'),
                     ),
                   const SizedBox(width: 8),
-                  if (user['role'] == 'admin')
+                  if (userRole == 'admin')
                     ElevatedButton(
                       onPressed: () => _confirmMakeDeveloper(user),
                       style: ElevatedButton.styleFrom(
@@ -409,6 +426,17 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                       child: const Text('В разработчики'),
+                    ),
+                  const SizedBox(width: 8),
+                  if (userRole == 'admin' || userRole == 'developer')
+                    ElevatedButton(
+                      onPressed: () => _updateUserRole(user['user_id'], 'user'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: const Text('В пользователи'),
                     ),
                 ],
               ),

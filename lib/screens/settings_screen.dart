@@ -40,7 +40,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  // Загрузка данных - теперь ID создается на сервере
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -67,7 +66,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  // Создание нового пользователя на сервере
   Future<void> _createNewUser() async {
     try {
       final response = await http.post(
@@ -99,7 +97,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // Fallback: создание пользователя локально если сервер недоступен
   void _createFallbackUser() async {
     final prefs = await SharedPreferences.getInstance();
     final fallbackId = _generateUniqueId();
@@ -211,7 +208,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Методы для редактирования ID
   void _startEditingUserId() {
     setState(() {
       _isEditingUserId = true;
@@ -250,10 +246,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ОБНОВЛЕННЫЕ МЕТОДЫ ДЛЯ РОЛЕЙ
   IconData _getRoleIcon() {
     switch (_userRole) {
       case 'admin': return Icons.admin_panel_settings;
       case 'developer': return Icons.developer_mode;
+      case 'student': return Icons.school; // Иконка для студента
       default: return Icons.person;
     }
   }
@@ -262,6 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     switch (_userRole) {
       case 'admin': return Colors.blue;
       case 'developer': return Colors.purple;
+      case 'student': return Colors.orange; // Оранжевый для студентов
       default: return Colors.green;
     }
   }
@@ -270,6 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     switch (_userRole) {
       case 'admin': return 'Администратор';
       case 'developer': return 'Разработчик';
+      case 'student': return 'Студент'; // Русское название для студента
       default: return 'Пользователь';
     }
   }
@@ -292,7 +292,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildUserHeader(),
           const SizedBox(height: 16),
-
 
           _buildSectionHeader('ВНЕШНИЙ ВИД'),
           const SizedBox(height: 8),
@@ -409,8 +408,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-
 
   Widget _buildSectionHeader(String title) {
     return Text(title, style: TextStyle(
