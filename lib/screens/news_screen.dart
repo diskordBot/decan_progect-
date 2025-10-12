@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+
+// ✅ Добавили: единый синий AppBar как на всех экранах
+import '../widgets/custom_app_bar.dart';
 
 class NewsScreen extends StatefulWidget {
   const NewsScreen({super.key});
@@ -99,7 +103,7 @@ class _NewsScreenState extends State<NewsScreen> {
 
   Future<void> _deleteNews(int id) async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('userId') ?? '000000'; // сохраняется при логине
+    final userId = prefs.getString('userId') ?? '000000';
 
     try {
       final response = await http.delete(
@@ -134,17 +138,12 @@ class _NewsScreenState extends State<NewsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(
-        title: const Text(
-          'Новости ДонНТУ',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: AppColors.primary,
+
+      appBar: const CustomAppBar(
+        title: 'Новости ДонНТУ',
+        showBackButton: false,
       ),
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _newsList.isEmpty
@@ -169,11 +168,12 @@ class _NewsScreenState extends State<NewsScreen> {
                 ),
               );
             }
-            final news = _newsList[_isOffline ? index - 1 : index];
+            final news =
+            _newsList[_isOffline ? index - 1 : index];
             return _buildNewsItem(context, news);
           },
-          separatorBuilder: (context, index) =>
-              _buildFancyDivider(), // красивый разделитель
+          // красивый разделитель
+          separatorBuilder: (context, index) => _buildFancyDivider(),
         ),
       ),
     );
@@ -211,18 +211,53 @@ class _NewsScreenState extends State<NewsScreen> {
                   ),
                 );
               },
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
                 ),
-                child: Image.network(
-                  images.first,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: 200,
-                  errorBuilder: (context, error, stackTrace) =>
-                      Container(height: 200, color: Colors.grey[300]),
+                constraints: const BoxConstraints(
+                  minHeight: 200,
+                  maxHeight: 400,
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                  child: Image.network(
+                    images.first,
+                    fit: BoxFit.contain, // оставляем contain
+                    width: double.infinity,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 200,
+                        color: Colors.grey[300],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 200,
+                      color: Colors.grey[300],
+                      child: const Icon(
+                        Icons.broken_image,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -387,7 +422,8 @@ class _FullScreenGalleryState extends State<FullScreenGallery>
 
   /// Двойной тап: увеличить/уменьшить
   void _handleDoubleTap(TapDownDetails details) {
-    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    final currentScale =
+    _transformationController.value.getMaxScaleOnAxis();
 
     if (currentScale == 1.0) {
       // Увеличиваем ×2 и центрируем по тапу
@@ -437,7 +473,26 @@ class _FullScreenGalleryState extends State<FullScreenGallery>
               maxScale: 5,
               child: Image.network(
                 widget.images[index],
-                fit: BoxFit.contain,
+                fit: BoxFit.contain, // оставляем contain
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                          : null,
+                      color: Colors.white,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => Center(
+                  child: Icon(
+                    Icons.broken_image,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                ),
               ),
             ),
           );
@@ -446,6 +501,3 @@ class _FullScreenGalleryState extends State<FullScreenGallery>
     );
   }
 }
-
-
-

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "163211022953",
+    "project_id": "decanprogeck",
+    "storage_bucket": "decanprogeck.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:163211022953:android:a55954339db0a2f48748f8",
+        "android_client_info": {
+          "package_name": "com.example.decanat_progect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlcN8RdoWVGn6EXVuveJzaolx_RA5GesQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

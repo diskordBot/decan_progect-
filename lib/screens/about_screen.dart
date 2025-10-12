@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
 import '../constants.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});

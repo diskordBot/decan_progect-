@@ -4,6 +4,9 @@ import 'package:decanat_progect/constants.dart';
 import 'package:decanat_progect/widgets/custom_app_bar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:decanat_progect/admin/admin_schedule_teacher_editor.dart';
+import 'dart:async';
+
 
 class DeveloperToolsScreen extends StatefulWidget {
   const DeveloperToolsScreen({super.key});
@@ -12,25 +15,31 @@ class DeveloperToolsScreen extends StatefulWidget {
   State<DeveloperToolsScreen> createState() => _DeveloperToolsScreenState();
 }
 
-class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
+class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with SingleTickerProviderStateMixin {
   List<dynamic> _users = [];
   List<dynamic> _filteredUsers = [];
+  List<dynamic> _filteredStudentsTeachers = [];
   bool _isLoading = true;
   String? _userId;
   String _userRole = 'user';
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  late TabController _tabController;
+
+  final List<String> _studentsTeachersRoles = ['teacher', 'student'];
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_filterUsers);
     _loadUserData();
-    _loadUsers();
+    _loadUsers(); // берём расширенный /api/users (с ФИО/группой/online)
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -44,13 +53,11 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
 
   Future<void> _loadUsers() async {
     try {
-      final response = await http.get(
-        Uri.parse('${AppConfig.serverUrl}/api/users'),
-      );
-
-      if (response.statusCode == 200) {
+      final resp = await http.get(Uri.parse('${AppConfig.serverUrl}/api/users'));
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body);
         setState(() {
-          _users = json.decode(response.body);
+          _users = List<Map<String, dynamic>>.from(data);
           _sortAndFilterUsers();
           _isLoading = false;
         });
@@ -65,67 +72,84 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
   }
 
   void _sortAndFilterUsers() {
-    // Сначала сортируем по роли: разработчики -> администраторы -> студенты -> пользователи
     _users.sort((a, b) {
-      final roleOrder = {'developer': 0, 'admin': 1, 'student': 2, 'user': 3};
-      return roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!);
+      const roleOrder = {'developer': 0, 'admin': 1, 'teacher': 2, 'student': 3, 'user': 4};
+      final ar = a['role'] ?? 'user';
+      final br = b['role'] ?? 'user';
+      return (roleOrder[ar] ?? 4).compareTo(roleOrder[br] ?? 4);
     });
-
-    // Затем применяем фильтр поиска
     _filterUsers();
   }
 
   void _filterUsers() {
-    final searchText = _searchController.text.toLowerCase().trim();
+    final q = _searchController.text.toLowerCase().trim();
 
-    if (searchText.isEmpty) {
-      setState(() {
-        _filteredUsers = List.from(_users);
-      });
+    List<dynamic> allUsersFiltered;
+    if (q.isEmpty) {
+      allUsersFiltered = _users.where((u) => !_studentsTeachersRoles.contains(u['role'])).toList();
     } else {
-      setState(() {
-        _filteredUsers = _users.where((user) {
-          final userId = user['user_id'].toString().toLowerCase();
-          final deviceInfo = user['device_info']?.toString().toLowerCase() ?? '';
-          final role = _getRoleName(user['role']).toLowerCase();
-
-          return userId.contains(searchText) ||
-              deviceInfo.contains(searchText) ||
-              role.contains(searchText);
-        }).toList();
-      });
+      allUsersFiltered = _users.where((u) {
+        if (_studentsTeachersRoles.contains(u['role'])) return false;
+        final userId = (u['user_id'] ?? '').toString().toLowerCase();
+        final role = _getRoleName(u['role'] ?? 'user').toLowerCase();
+        final fullName = (u['full_name'] ?? '').toString().toLowerCase();
+        final login = (u['login'] ?? '').toString().toLowerCase();
+        // device_info убран из поиска
+        return userId.contains(q) || role.contains(q) || fullName.contains(q) || login.contains(q);
+      }).toList();
     }
+
+    List<dynamic> studentsTeachersFiltered;
+    if (q.isEmpty) {
+      studentsTeachersFiltered = _users.where((u) => _studentsTeachersRoles.contains(u['role'])).toList();
+    } else {
+      studentsTeachersFiltered = _users.where((u) {
+        if (!_studentsTeachersRoles.contains(u['role'])) return false;
+        final userId = (u['user_id'] ?? '').toString().toLowerCase();
+        final role = _getRoleName(u['role'] ?? 'user').toLowerCase();
+        final fullName = (u['full_name'] ?? '').toString().toLowerCase();
+        final login = (u['login'] ?? '').toString().toLowerCase();
+        final groupName = (u['group_name'] ?? '').toString().toLowerCase();
+        final department = (u['department'] ?? '').toString().toLowerCase();
+        final position = (u['position'] ?? '').toString().toLowerCase();
+        return userId.contains(q) ||
+            role.contains(q) ||
+            fullName.contains(q) ||
+            login.contains(q) ||
+            groupName.contains(q) ||
+            department.contains(q) ||
+            position.contains(q);
+      }).toList();
+    }
+
+    setState(() {
+      _filteredUsers = allUsersFiltered;
+      _filteredStudentsTeachers = studentsTeachersFiltered;
+    });
   }
 
   void _confirmMakeDeveloper(Map<String, dynamic> user) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Подтверждение действия'),
-          content: Text(
-            'Вы уверены, что хотите сделать пользователя ${user['user_id']} разработчиком?\n\n'
-                '⚠️ Это действие нельзя будет отменить! Разработчики имеют полный доступ ко всем функциям системы.',
-            style: const TextStyle(fontSize: 14),
+      builder: (_) => AlertDialog(
+        title: const Text('Подтверждение действия'),
+        content: Text(
+          'Вы уверены, что хотите сделать пользователя ${user['user_id']} разработчиком?\n\n'
+              '⚠️ Это действие нельзя будет отменить! Разработчики имеют полный доступ.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _updateUserRole(user['user_id'], 'developer');
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Сделать разработчиком'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _updateUserRole(user['user_id'], 'developer');
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
-              child: const Text('Сделать разработчиком'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -136,47 +160,45 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'user_id': userId, 'role': newRole}),
       );
-
       if (response.statusCode == 200) {
         _showSnackBar('Роль пользователя обновлена');
-        _loadUsers(); // Обновляем список
+        _loadUsers();
       } else {
         _showSnackBar('Ошибка обновления роли');
       }
-    } catch (e) {
+    } catch (_) {
       _showSnackBar('Ошибка подключения');
     }
   }
 
   Future<void> _removeAdminRole(String userId) async {
     try {
-      final response = await http.delete(
-        Uri.parse('${AppConfig.serverUrl}/api/users/$userId/admin'),
-      );
-
+      final response = await http.delete(Uri.parse('${AppConfig.serverUrl}/api/users/$userId/admin'));
       if (response.statusCode == 200) {
         _showSnackBar('Права администратора сняты');
-        _loadUsers(); // Обновляем список
+        _loadUsers();
       } else {
         final errorData = json.decode(response.body);
         _showSnackBar(errorData['detail'] ?? 'Ошибка снятия прав');
       }
     } catch (e) {
-      _showSnackBar('Ошибка подклюки: $e');
+      _showSnackBar('Ошибка подключения: $e');
     }
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   String _formatDateTime(String dateTime) {
     try {
       final date = DateTime.parse(dateTime);
-      return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
+      final m = date.month.toString().padLeft(2, '0');
+      final d = date.day.toString().padLeft(2, '0');
+      final hh = date.hour.toString().padLeft(2, '0');
+      final mm = date.minute.toString().padLeft(2, '0');
+      return '$d.$m.${date.year} $hh:$mm';
+    } catch (_) {
       return dateTime;
     }
   }
@@ -185,8 +207,9 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return Colors.purple;
       case 'admin': return Colors.blue;
-      case 'student': return Colors.orange; // Оранжевый для студентов
-      default: return Colors.green;
+      case 'teacher': return Colors.green;
+      case 'student': return Colors.orange;
+      default: return Colors.grey;
     }
   }
 
@@ -194,7 +217,8 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return 'Разработчик';
       case 'admin': return 'Администратор';
-      case 'student': return 'Студент'; // Русское название для студента
+      case 'teacher': return 'Преподаватель';
+      case 'student': return 'Студент';
       default: return 'Пользователь';
     }
   }
@@ -203,111 +227,27 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     switch (role) {
       case 'developer': return Icons.developer_mode;
       case 'admin': return Icons.admin_panel_settings;
-      case 'student': return Icons.school; // Иконка для студента
+      case 'teacher': return Icons.person;
+      case 'student': return Icons.school;
       default: return Icons.person;
     }
   }
 
-  int _getRolePriority(String role) {
-    switch (role) {
-      case 'developer': return 0;
-      case 'admin': return 1;
-      case 'student': return 2;
-      default: return 3;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_userRole != 'developer') {
-      return Scaffold(
-        appBar: const CustomAppBar(title: 'Список пользователей', showBackButton: true),
-        body: const Center(
-          child: Text('Доступно только разработчикам', style: TextStyle(fontSize: 16)),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: const CustomAppBar(title: 'Список пользователей', showBackButton: true),
-      body: Column(
-        children: [
-          // Строка поиска
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'Поиск по ID, устройству или роли',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                  },
-                )
-                    : null,
-              ),
-            ),
-          ),
-          // Статистика
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatCard('Всего', _filteredUsers.length, Colors.grey),
-                _buildStatCard('Разработчики',
-                    _filteredUsers.where((u) => u['role'] == 'developer').length,
-                    Colors.purple
-                ),
-                _buildStatCard('Админы',
-                    _filteredUsers.where((u) => u['role'] == 'admin').length,
-                    Colors.blue
-                ),
-                _buildStatCard('Студенты',
-                    _filteredUsers.where((u) => u['role'] == 'student').length,
-                    Colors.orange
-                ),
-                _buildStatCard('Пользователи',
-                    _filteredUsers.where((u) => u['role'] == 'user').length,
-                    Colors.green
-                ),
-              ],
-            ),
-          ),
-
-          // Список пользователей
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-              onRefresh: _loadUsers,
-              child: _filteredUsers.isEmpty
-                  ? Center(
-                child: Text(
-                  _searchController.text.isEmpty
-                      ? 'Нет пользователей'
-                      : 'Пользователи не найдены',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              )
-                  : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _filteredUsers.length,
-                itemBuilder: (context, index) {
-                  final user = _filteredUsers[index];
-                  return _buildUserCard(user);
-                },
-              ),
-            ),
-          ),
-        ],
+  Widget _buildOnlineChip(Map<String, dynamic> user) {
+    final bool online = (user['online'] ?? false) == true;
+    final String? lastSeen = user['last_seen'] as String?;
+    return Chip(
+      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+      avatar: CircleAvatar(
+        radius: 6,
+        backgroundColor: online ? Colors.green : Colors.grey,
       ),
+      label: Text(
+        online ? 'Онлайн' : 'Офлайн${lastSeen != null ? ' • ${_formatDateTime(lastSeen)}' : ''}',
+        style: const TextStyle(fontSize: 12),
+      ),
+      backgroundColor: (online ? Colors.green : Colors.grey).withOpacity(0.12),
+      side: BorderSide(color: online ? Colors.green : Colors.grey),
     );
   }
 
@@ -326,10 +266,33 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
     );
   }
 
+  Widget _buildStatistics(List<dynamic> users, bool isAllUsersTab) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildStatCard('Всего', users.length, Colors.grey),
+            if (isAllUsersTab) _buildStatCard('Разработчики', users.where((u) => u['role'] == 'developer').length, Colors.purple),
+            if (isAllUsersTab) _buildStatCard('Админы', users.where((u) => u['role'] == 'admin').length, Colors.blue),
+            if (!isAllUsersTab) _buildStatCard('Преподаватели', users.where((u) => u['role'] == 'teacher').length, Colors.green),
+            if (!isAllUsersTab) _buildStatCard('Студенты', users.where((u) => u['role'] == 'student').length, Colors.orange),
+            if (isAllUsersTab) _buildStatCard('Пользователи', users.where((u) => u['role'] == 'user').length, Colors.grey[600]!),
+            _buildStatCard('Онлайн', users.where((u) => (u['online'] ?? false) == true).length, Colors.green),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUserCard(Map<String, dynamic> user) {
     final isCurrentUser = user['user_id'] == _userId;
     final isSystemDeveloper = user['user_id'] == '000000';
-    final userRole = user['role'];
+    final role = (user['role'] ?? 'user') as String;
+
+    final String? fullName = user['full_name'];
+    final String? groupName = user['group_name'];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -338,115 +301,188 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Верхняя строка
             Row(
               children: [
-                // Иконка роли
                 Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: _getRoleColor(userRole).withOpacity(0.1),
+                    color: _getRoleColor(role).withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    _getRoleIcon(userRole),
-                    color: _getRoleColor(userRole),
-                    size: 20,
-                  ),
+                  child: Icon(_getRoleIcon(role), color: _getRoleColor(role), size: 20),
                 ),
                 const SizedBox(width: 12),
-                // Информация о пользователе
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'ID: ${user['user_id']}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Text(
-                        _getRoleName(userRole),
-                        style: TextStyle(
-                          color: _getRoleColor(userRole),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('ID: ${user['user_id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(_getRoleName(role), style: TextStyle(color: _getRoleColor(role), fontSize: 14, fontWeight: FontWeight.w500)),
                     ],
                   ),
                 ),
-                // Метка "Вы" для текущего пользователя
                 if (isCurrentUser)
-                  const Chip(
-                    label: Text('Вы', style: TextStyle(fontSize: 12)),
-                    backgroundColor: Colors.orange,
-                  ),
+                  const Chip(label: Text('Вы', style: TextStyle(fontSize: 12)), backgroundColor: Colors.orange),
               ],
             ),
+
             const SizedBox(height: 8),
-            // Дополнительная информация
-            if (user['device_info'] != null)
-              Text('Устройство: ${user['device_info']}', style: const TextStyle(fontSize: 12)),
-            Text('Создан: ${_formatDateTime(user['created_at'])}', style: const TextStyle(fontSize: 12)),
+
+            // ФИО
+            if (fullName != null && fullName.isNotEmpty)
+              Text('ФИО: $fullName', style: const TextStyle(fontSize: 13)),
+
+            // Группа только для студентов
+            if (role == 'student' && groupName != null && groupName.isNotEmpty)
+              Text('Группа: $groupName', style: const TextStyle(fontSize: 13)),
+
+            // Даты
+            const SizedBox(height: 6),
+            Text('Создан: ${_formatDateTime(user['created_at'] ?? '')}', style: const TextStyle(fontSize: 12)),
             if (user['updated_at'] != null)
-              Text('Обновлен: ${_formatDateTime(user['updated_at'])}', style: const TextStyle(fontSize: 12)),
+              Text('Обновлён: ${_formatDateTime(user['updated_at'])}', style: const TextStyle(fontSize: 12)),
+
+            const SizedBox(height: 8),
+
+            // Онлайн/офлайн
+            _buildOnlineChip(user),
+
             const SizedBox(height: 12),
-            // Кнопки управления
+
             if (!isSystemDeveloper)
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  if (userRole == 'admin')
+                  if (role == 'admin')
                     ElevatedButton(
                       onPressed: () => _removeAdminRole(user['user_id']),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                       child: const Text('Снять админа'),
                     ),
-                  const SizedBox(width: 8),
-                  if (userRole == 'user' || userRole == 'student')
+                  if (role == 'user' || role == 'student' || role == 'teacher')
                     ElevatedButton(
                       onPressed: () => _updateUserRole(user['user_id'], 'admin'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
                       child: const Text('Сделать админом'),
                     ),
-                  const SizedBox(width: 8),
-                  if (userRole == 'admin')
+                  if (role == 'admin')
                     ElevatedButton(
                       onPressed: () => _confirmMakeDeveloper(user),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
                       child: const Text('В разработчики'),
                     ),
-                  const SizedBox(width: 8),
-                  if (userRole == 'admin' || userRole == 'developer')
+                  if (role == 'admin' || role == 'developer' || role == 'teacher')
                     ElevatedButton(
                       onPressed: () => _updateUserRole(user['user_id'], 'user'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                       child: const Text('В пользователи'),
+                    ),
+                  if (role == 'user' || role == 'admin' || role == 'developer')
+                    ElevatedButton(
+                      onPressed: () => _updateUserRole(user['user_id'], 'teacher'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                      child: const Text('В преподаватели'),
+                    ),
+                  if (role == 'user' || role == 'admin' || role == 'developer' || role == 'teacher')
+                    ElevatedButton(
+                      onPressed: () => _updateUserRole(user['user_id'], 'student'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                      child: const Text('В студенты'),
                     ),
                 ],
               ),
             if (isSystemDeveloper)
-              Text(
-                'Системный разработчик (нельзя изменить)',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
+              Text('Системный разработчик (нельзя изменить)', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildUsersList(List<dynamic> users) {
+    if (users.isEmpty) {
+      return Center(
+        child: Text(
+          _searchController.text.isEmpty ? 'Нет пользователей' : 'Пользователи не найдены',
+          style: const TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: users.length,
+      itemBuilder: (_, i) => _buildUserCard(users[i]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_userRole != 'developer') {
+      return const Scaffold(
+        appBar: CustomAppBar(title: 'Список пользователей', showBackButton: true),
+        body: Center(child: Text('Доступно только разработчикам', style: TextStyle(fontSize: 16))),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Управление пользователями'),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.yellowAccent,
+          tabs: const [Tab(text: 'Пользователи'), Tab(text: 'Студ. и препод.')],
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Поиск по ID, ФИО, логину, группе и т.д.',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(icon: const Icon(Icons.clear), onPressed: _searchController.clear)
+                    : null,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                Column(
+                  children: [
+                    _buildStatistics(_filteredUsers, true),
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : RefreshIndicator(onRefresh: _loadUsers, child: _buildUsersList(_filteredUsers)),
+                    ),
+                  ],
+                ),
+                Column(
+                  children: [
+                    _buildStatistics(_filteredStudentsTeachers, false),
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : RefreshIndicator(onRefresh: _loadUsers, child: _buildUsersList(_filteredStudentsTeachers)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

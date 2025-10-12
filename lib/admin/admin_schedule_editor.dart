@@ -1,52 +1,73 @@
+// lib/admin/admin_schedule_editor.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:decanat_progect/constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/animation.dart';
 
+// ------------------------ ENUM ДОЛЖЕН БЫТЬ ВНЕ КЛАССА ------------------------
+enum _SaveAction { save, discard, cancel }
+
+// ------------------------ ЭКРАН РЕДАКТОРА ------------------------
 class AdminScheduleEditor extends StatefulWidget {
+  const AdminScheduleEditor({super.key});
+
   @override
   _AdminScheduleEditorState createState() => _AdminScheduleEditorState();
 }
 
 class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
-  List<String> groups = [];
-  String? selectedGroup;
-  String selectedWeek = 'upper';
-  bool isLoading = true;
-  bool isAddingNewGroup = false;
-  bool isEditingExisting = false;
-  bool isLoadingSchedule = false;
-  bool _isDropdownOpen = false; // Добавьте эту переменную
-  TextEditingController newGroupController = TextEditingController();
+  // --- Состояние доступа
   String _userRole = 'user';
 
-  // Данные для расписания - раздельные для верхней и нижней недель
-  Map<String, List<ScheduleItem>> upperWeekSchedule = {};
-  Map<String, List<ScheduleItem>> lowerWeekSchedule = {};
+  // --- Группы
+  List<String> groups = [];
+  String? selectedGroup;
+  bool isLoading = true;
+  bool isAddingNewGroup = false;
+  bool isLoadingSchedule = false;
+  bool isEditingExisting = false;
 
-  final List<String> daysOfWeek = [
+  // --- Недели
+  String selectedWeek = 'upper'; // 'upper' | 'lower'
+  final List<String> daysOfWeek = const [
     'Понедельник',
     'Вторник',
     'Среда',
     'Четверг',
     'Пятница',
-    'Суббота'
-  ];
+  ]; // Суббота/Воскресенье — выходные (не показываем)
 
-  final List<String> lessonTypes = ['лекц', 'пр', 'лб'];
+  final List<String> lessonTypes = const ['лекц', 'пр', 'лб'];
 
-  // Создаем контроллеры для всех полей текста
-  Map<String, TextEditingController> subjectControllers = {};
-  Map<String, TextEditingController> classroomControllers = {};
-  Map<String, TextEditingController> teacherControllers = {};
+  // --- Выпадающий список
+  bool _isDropdownOpen = false;
+
+  // --- Контроллеры ввода (ключ: 'День-Индекс-Неделя')
+  final Map<String, TextEditingController> subjectControllers = {};
+  final Map<String, TextEditingController> classroomControllers = {};
+  final Map<String, TextEditingController> teacherControllers = {};
+  final TextEditingController newGroupController = TextEditingController();
+
+  // --- Данные расписания по неделям
+  final Map<String, List<ScheduleItem>> upperWeekSchedule = {};
+  final Map<String, List<ScheduleItem>> lowerWeekSchedule = {};
+
+  // --- Флаг «грязности» — несохранённые изменения
+  bool _isDirty = false;
 
   @override
   void initState() {
     super.initState();
     _loadUserRole();
     _loadGroups();
+  }
+
+  @override
+  void dispose() {
+    _disposeAndClearAllControllers();
+    newGroupController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserRole() async {
@@ -56,19 +77,76 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
     });
   }
 
-  @override
-  void dispose() {
-    // Не забываем очистить контроллеры после завершения работы
-    subjectControllers.forEach((key, controller) => controller.dispose());
-    classroomControllers.forEach((key, controller) => controller.dispose());
-    teacherControllers.forEach((key, controller) => controller.dispose());
-    newGroupController.dispose();
-    super.dispose();
+  // ====== УТИЛИТЫ ===========================================================
+  String _ctrlKey(String day, int index, String week) => '$day-$index-$week';
+
+  Map<String, List<ScheduleItem>> get _weekMap =>
+      selectedWeek == 'upper' ? upperWeekSchedule : lowerWeekSchedule;
+
+  void _ensureEmptyStructure() {
+    for (final d in daysOfWeek) {
+      upperWeekSchedule.putIfAbsent(d, () => []);
+      lowerWeekSchedule.putIfAbsent(d, () => []);
+    }
   }
 
+  void _disposeAndClearAllControllers() {
+    for (final c in subjectControllers.values) c.dispose();
+    for (final c in classroomControllers.values) c.dispose();
+    for (final c in teacherControllers.values) c.dispose();
+    subjectControllers.clear();
+    classroomControllers.clear();
+    teacherControllers.clear();
+  }
+
+  void _dropControllersForDayWeek(String day, String week) {
+    final prefix = '$day-';
+    final suffix = '-$week';
+
+    void removeMatching(Map<String, TextEditingController> map) {
+      final toRemove = <String>[];
+      map.forEach((k, v) {
+        if (k.startsWith(prefix) && k.endsWith(suffix)) {
+          v.dispose();
+          toRemove.add(k);
+        }
+      });
+      for (final k in toRemove) {
+        map.remove(k);
+      }
+    }
+
+    removeMatching(subjectControllers);
+    removeMatching(classroomControllers);
+    removeMatching(teacherControllers);
+  }
+
+  void _dropControllersForWeek(String week) {
+    final suffix = '-$week';
+
+    void removeMatching(Map<String, TextEditingController> map) {
+      final toRemove = <String>[];
+      map.forEach((k, v) {
+        if (k.endsWith(suffix)) {
+          v.dispose();
+          toRemove.add(k);
+        }
+      });
+      for (final k in toRemove) {
+        map.remove(k);
+      }
+    }
+
+    removeMatching(subjectControllers);
+    removeMatching(classroomControllers);
+    removeMatching(teacherControllers);
+  }
+
+  // ====== ЗАГРУЗКА ГРУПП ====================================================
   Future<void> _loadGroups() async {
     try {
-      final response = await http.get(Uri.parse('${AppConfig.serverUrl}/api/groups'));
+      final response =
+      await http.get(Uri.parse('${AppConfig.serverUrl}/api/groups'));
 
       if (response.statusCode == 200) {
         setState(() {
@@ -76,24 +154,33 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
           isLoading = false;
         });
       } else {
-        _loadLocalGroups();
+        _loadLocalGroupsFallback();
       }
-    } catch (e) {
-      _loadLocalGroups();
+    } catch (_) {
+      _loadLocalGroupsFallback();
     }
   }
 
-  void _loadLocalGroups() {
+  void _loadLocalGroupsFallback() {
+    // Генерация в точности как на сервере:
+    const bachelor = ['ПМК', 'ИВТ', 'ИНФ', 'ПИ', 'САУ'];
+    const master = ['ПМКм', 'ИВТм', 'ИНФм', 'ПИм', 'САУм'];
+    const yearSuffix = {2025: '25', 2024: '24', 2023: '23', 2022: '22'};
+
+    final generated = <String>[];
+    for (final y in [2025, 2024, 2023, 2022]) {
+      final suf = yearSuffix[y]!;
+      generated.addAll(bachelor.map((p) => '$p-$suf'));
+      generated.addAll(master.map((p) => '$p-$suf'));
+    }
+
     setState(() {
-      groups = [
-        'КИ-25', 'СП-25а', 'СП-25б', 'КСЦ-25', 'ПИ-25а', 'ПИ-25б', 'ПИ-25в',
-        'ИИ-25а', 'ИИ-25б', 'ИНФ-25', 'САУ-25', 'ПМКИ-25', 'КИ-24', 'СП-24',
-        'КСЦ-24', 'ПИ-24а', 'ПИ-24б', 'ИИ-24', 'ИНФ-24', 'САУ-24'
-      ];
+      groups = generated;
       isLoading = false;
     });
   }
 
+  // ====== ЗАГРУЗКА ПОЛНОГО РАСПИСАНИЯ =======================================
   Future<void> _loadExistingSchedule() async {
     if (selectedGroup == null) return;
 
@@ -106,128 +193,132 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         Uri.parse('${AppConfig.serverUrl}/api/schedule/$selectedGroup'),
       );
 
+      // свежий старт: чистим контроллеры и карты
+      _disposeAndClearAllControllers();
+      upperWeekSchedule.clear();
+      lowerWeekSchedule.clear();
+      _ensureEmptyStructure();
+
       if (response.statusCode == 200) {
-        final Map<String, dynamic> scheduleData = json.decode(response.body);
+        final Map<String, dynamic> scheduleData =
+        json.decode(response.body) as Map<String, dynamic>;
 
-        // Очищаем текущие расписания
-        upperWeekSchedule.clear();
-        lowerWeekSchedule.clear();
-
-        // Загружаем верхнюю неделю
         if (scheduleData['upper_week'] != null) {
-          final Map<String, dynamic> upperWeek = scheduleData['upper_week'];
+          final Map<String, dynamic> upperWeek =
+          scheduleData['upper_week'] as Map<String, dynamic>;
           upperWeek.forEach((day, lessons) {
-            upperWeekSchedule[day] = (lessons as List).map((lesson) =>
-                ScheduleItem.fromJson(lesson)
-            ).toList();
+            upperWeekSchedule[day] = (lessons as List)
+                .map((raw) =>
+                ScheduleItem.fromJson(raw).copyWith(weekType: 'upper'))
+                .toList();
           });
         }
 
-        // Загружаем нижнюю неделю
         if (scheduleData['lower_week'] != null) {
-          final Map<String, dynamic> lowerWeek = scheduleData['lower_week'];
+          final Map<String, dynamic> lowerWeek =
+          scheduleData['lower_week'] as Map<String, dynamic>;
           lowerWeek.forEach((day, lessons) {
-            lowerWeekSchedule[day] = (lessons as List).map((lesson) =>
-                ScheduleItem.fromJson(lesson)
-            ).toList();
+            lowerWeekSchedule[day] = (lessons as List)
+                .map((raw) =>
+                ScheduleItem.fromJson(raw).copyWith(weekType: 'lower'))
+                .toList();
           });
         }
 
         setState(() {
-          isLoadingSchedule = false;
           isEditingExisting = true;
+          isLoadingSchedule = false;
+          _isDirty = false; // только просмотр после загрузки
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Расписание загружено для редактирования'),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Расписание загружено'),
             backgroundColor: Colors.green,
-          ),
-        );
+          ));
+        }
       } else {
         setState(() {
-          isLoadingSchedule = false;
           isEditingExisting = false;
+          isLoadingSchedule = false;
         });
-
-        // Если расписания нет, создаем пустые структуры
-        _initializeEmptySchedules();
+        _ensureEmptyStructure();
       }
     } catch (e) {
       setState(() {
-        isLoadingSchedule = false;
         isEditingExisting = false;
+        isLoadingSchedule = false;
       });
-
-      // Если ошибка, создаем пустые структуры
-      _initializeEmptySchedules();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка загрузки расписания: $e'),
+      _ensureEmptyStructure();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Ошибка загрузки: $e'),
           backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _initializeEmptySchedules() {
-    for (var day in daysOfWeek) {
-      upperWeekSchedule[day] = [];
-      lowerWeekSchedule[day] = [];
-    }
-  }
-
-  Future<void> _addNewGroup() async {
-    if (newGroupController.text.isNotEmpty) {
-      try {
-        final response = await http.post(
-          Uri.parse('${AppConfig.serverUrl}/api/groups'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({'group_name': newGroupController.text}),
-        );
-
-        if (response.statusCode == 200) {
-          setState(() {
-            groups.add(newGroupController.text);
-            selectedGroup = newGroupController.text;
-            isAddingNewGroup = false;
-            newGroupController.clear();
-          });
-
-          // Создаем пустые структуры для новой группы
-          _initializeEmptySchedules();
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Группа добавлена успешно'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        setState(() {
-          groups.add(newGroupController.text);
-          selectedGroup = newGroupController.text;
-          isAddingNewGroup = false;
-          newGroupController.clear();
-        });
-
-        // Создаем пустые структуры для новой группы
-        _initializeEmptySchedules();
+        ));
       }
     }
   }
 
+  // ====== ДОБАВЛЕНИЕ ГРУППЫ =================================================
+  Future<void> _addNewGroup() async {
+    final name = newGroupController.text.trim();
+    if (name.isEmpty) return;
+
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.serverUrl}/api/groups'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'group_name': name}),
+      );
+
+      setState(() {
+        groups.add(name);
+        selectedGroup = name;
+        isAddingNewGroup = false;
+        newGroupController.clear();
+        _isDirty = false;
+      });
+
+      _disposeAndClearAllControllers();
+      _ensureEmptyStructure();
+
+      if (response.statusCode == 200 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Группа добавлена'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (_) {
+      setState(() {
+        groups.add(name);
+        selectedGroup = name;
+        isAddingNewGroup = false;
+        newGroupController.clear();
+        _isDirty = false;
+      });
+      _disposeAndClearAllControllers();
+      _ensureEmptyStructure();
+    }
+  }
+
+  // ====== СОХРАНЕНИЕ ОБЕИХ НЕДЕЛЬ ==========================================
   Future<void> _saveSchedule() async {
     if (selectedGroup == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Выберите группу'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Выберите группу'),
+        backgroundColor: Colors.red,
+      ));
       return;
+    }
+
+    // 1) Удаляем пустые предметы + пере-нумеровываем 1..N
+    for (final map in [upperWeekSchedule, lowerWeekSchedule]) {
+      map.forEach((_, items) {
+        items.removeWhere((it) => it.subject.trim().isEmpty);
+        for (int i = 0; i < items.length; i++) {
+          items[i] = items[i].copyWith(lessonNumber: i + 1);
+        }
+      });
     }
 
     try {
@@ -243,45 +334,70 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         body: json.encode(scheduleData),
       );
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Расписание сохранено успешно'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (response.statusCode == 200 && mounted) {
+        setState(() => isEditingExisting = true);
+        _isDirty = false;
 
-        setState(() {
-          isEditingExisting = true;
-        });
+        // 2) Сразу подтянуть, что реально сохранилось
+        await _loadExistingSchedule();
+
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Обе недели сохранены'),
+          backgroundColor: Colors.green,
+        ));
+      } else {
+        throw Exception('Код ответа: ${response.statusCode}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Ошибка сохранения: $e'),
           backgroundColor: Colors.red,
-        ),
-      );
+        ));
+      }
     }
   }
 
-  Map<String, dynamic> _convertScheduleToJson(Map<String, List<ScheduleItem>> schedule) {
-    Map<String, dynamic> result = {};
-
+  Map<String, dynamic> _convertScheduleToJson(
+      Map<String, List<ScheduleItem>> schedule,
+      ) {
+    final result = <String, dynamic>{};
     schedule.forEach((day, items) {
-      result[day] = items.map((item) => item.toJson()).toList();
+      // на всякий случай сортируем по номеру пары
+      final sorted = [...items]..sort((a, b) => a.lessonNumber.compareTo(b.lessonNumber));
+      result[day] = sorted.map((it) => it.toJson()).toList();
     });
-
     return result;
   }
 
-  void _addLesson(String day) {
-    setState(() {
-      final schedule = selectedWeek == 'upper' ? upperWeekSchedule : lowerWeekSchedule;
-      if (!schedule.containsKey(day)) {
-        schedule[day] = [];
-      }
+  // ====== ОПЕРАЦИИ С УРОКАМИ ================================================
+  Future<void> _guardedChange(VoidCallback applyChange) async {
+    if (!_isDirty) {
+      setState(applyChange);
+      return;
+    }
+    final action = await _askSaveDialog();
+    if (!mounted || action == null) return;
 
+    if (action == _SaveAction.save) {
+      await _saveSchedule();
+      if (!_isDirty) setState(applyChange);
+    } else if (action == _SaveAction.discard) {
+      setState(applyChange);
+    }
+  }
+
+  void _onWeekChanged(String week) {
+    if (week == selectedWeek) return;
+    _guardedChange(() {
+      selectedWeek = week;
+    });
+  }
+
+  void _addLesson(String day) {
+    final schedule = _weekMap;
+    schedule.putIfAbsent(day, () => []);
+    setState(() {
       schedule[day]!.add(ScheduleItem(
         lessonNumber: schedule[day]!.length + 1,
         subject: '',
@@ -290,82 +406,132 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         type: 'лекц',
         weekType: selectedWeek,
       ));
+      _isDirty = true;
     });
   }
 
   void _removeLesson(String day, int index) {
-    setState(() {
-      final schedule = selectedWeek == 'upper' ? upperWeekSchedule : lowerWeekSchedule;
-      if (schedule.containsKey(day) && index < schedule[day]!.length) {
-        schedule[day]!.removeAt(index);
+    final schedule = _weekMap;
+    if (!schedule.containsKey(day) || index >= schedule[day]!.length) return;
 
-        // Renumber lessons
-        for (int i = 0; i < schedule[day]!.length; i++) {
-          schedule[day]![i] = schedule[day]![i].copyWith(lessonNumber: i + 1);
-        }
+    setState(() {
+      schedule[day]!.removeAt(index);
+      for (int i = 0; i < schedule[day]!.length; i++) {
+        schedule[day]![i] = schedule[day]![i].copyWith(lessonNumber: i + 1);
       }
+      // удаляем контроллеры конкретного дня/недели, чтобы не было «залипших» ключей
+      _dropControllersForDayWeek(day, selectedWeek);
+      _isDirty = true;
     });
   }
 
   void _updateLesson(String day, int index, ScheduleItem updatedItem) {
+    final schedule = _weekMap;
+    if (!schedule.containsKey(day) || index >= schedule[day]!.length) return;
+
     setState(() {
-      final schedule = selectedWeek == 'upper' ? upperWeekSchedule : lowerWeekSchedule;
-      if (schedule.containsKey(day) && index < schedule[day]!.length) {
-        schedule[day]![index] = updatedItem;
-      }
+      schedule[day]![index] = updatedItem;
+      _isDirty = true;
     });
   }
 
   void _clearSchedule() {
     setState(() {
-      _initializeEmptySchedules();
+      for (final d in daysOfWeek) {
+        upperWeekSchedule[d] = [];
+        lowerWeekSchedule[d] = [];
+      }
       isEditingExisting = false;
+      _isDirty = true;
+      _disposeAndClearAllControllers();
     });
   }
 
   void _copyUpperToLowerWeek() {
     setState(() {
       lowerWeekSchedule.clear();
-      upperWeekSchedule.forEach((day, lessons) {
-        lowerWeekSchedule[day] = lessons.map((lesson) => lesson.copyWith(weekType: 'lower')).toList();
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Расписание скопировано с верхней недели на нижнюю'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      for (final d in daysOfWeek) {
+        final src = upperWeekSchedule[d] ?? [];
+        lowerWeekSchedule[d] =
+            src.map((x) => x.copyWith(weekType: 'lower')).toList();
+      }
+      // контроллеры нижней недели становятся неактуальны
+      _dropControllersForWeek('lower');
+      _isDirty = true;
     });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Скопировано: Верхняя → Нижняя'),
+      backgroundColor: Colors.green,
+    ));
   }
 
   void _copyLowerToUpperWeek() {
     setState(() {
       upperWeekSchedule.clear();
-      lowerWeekSchedule.forEach((day, lessons) {
-        upperWeekSchedule[day] = lessons.map((lesson) => lesson.copyWith(weekType: 'upper')).toList();
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Расписание скопировано с нижней недели на верхнюю'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      for (final d in daysOfWeek) {
+        final src = lowerWeekSchedule[d] ?? [];
+        upperWeekSchedule[d] =
+            src.map((x) => x.copyWith(weekType: 'upper')).toList();
+      }
+      _dropControllersForWeek('upper');
+      _isDirty = true;
     });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Скопировано: Нижняя → Верхняя'),
+      backgroundColor: Colors.green,
+    ));
   }
 
+  // ====== GUARD НА ВОЗВРАТ ==================================================
+  Future<bool> _onWillPopGuard() async {
+    if (!_isDirty) return true;
+    final action = await _askSaveDialog();
+    if (!mounted || action == null) return false;
+
+    if (action == _SaveAction.save) {
+      await _saveSchedule();
+      return !_isDirty;
+    } else if (action == _SaveAction.discard) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<_SaveAction?> _askSaveDialog() async {
+    return showDialog<_SaveAction>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Несохранённые изменения'),
+        content: const Text('Сохранить изменения перед выходом?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.cancel),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.discard),
+            child: const Text('Не сохранять'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.save),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ====== UI ================================================================
   @override
   Widget build(BuildContext context) {
-    // Проверяем, имеет ли пользователь права доступа
     if (_userRole != 'admin' && _userRole != 'developer') {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
         appBar: AppBar(
-          title: Text('Доступ запрещен'),
+          title: const Text('Доступ запрещен'),
           backgroundColor: AppColors.primary,
         ),
-        body: Center(
+        body: const Center(
           child: Text(
             'У вас нет прав для доступа к этому разделу',
             style: TextStyle(fontSize: 18),
@@ -374,97 +540,96 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(
-        title: Text(
-          'Редактор расписания',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onPrimary,
-            fontWeight: FontWeight.bold,
+    return WillPopScope(
+      onWillPop: _onWillPopGuard,
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.background,
+        appBar: AppBar(
+          title: Text(
+            'Редактор расписания',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
+          backgroundColor: AppColors.primary,
+          centerTitle: true,
+          elevation: 0,
+          iconTheme:
+          IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
+          actions: [
+            IconButton(
+              tooltip: 'Сохранить обе недели',
+              icon: const Icon(Icons.save_rounded),
+              onPressed: _saveSchedule,
+            ),
+          ],
         ),
-        backgroundColor: AppColors.primary,
-        centerTitle: true,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
-      ),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Выбор группы
-            _buildGroupSelector(),
-            SizedBox(height: 20),
-
-            if (selectedGroup != null) ...[
-              // Автоматическая загрузка расписания
-              if (!isEditingExisting && !isLoadingSchedule)
-                Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _saveSchedule,
+          label: const Text('Сохранить обе недели'),
+          icon: const Icon(Icons.save_rounded),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGroupSelector(),
+              const SizedBox(height: 20),
+              if (selectedGroup != null) ...[
+                if (!isEditingExisting && !isLoadingSchedule)
+                  Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(context).dividerColor,
-                        width: 1,
-                      ),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Создание нового расписания',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.onBackground,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(context).dividerColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Создание нового расписания',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 10),
-                        TextButton(
-                          onPressed: _clearSchedule,
-                          child: Text('Начать создание нового расписания'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              if (!isLoadingSchedule) ...[
-                SizedBox(height: 20),
-
-                // Выбор недели и кнопки копирования
-                _buildWeekSelectorWithCopyButtons(),
-                SizedBox(height: 20),
-
-                // Редактор расписания
-                ..._buildScheduleEditor(),
-
-                SizedBox(height: 20),
-                Center(
-                  child: ElevatedButton(
-                    onPressed: _saveSchedule,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: _clearSchedule,
+                            child: const Text(
+                                'Начать создание нового расписания'),
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     ),
-                    child: const Text('Сохранить расписание'),
                   ),
-                ),
+                if (!isLoadingSchedule) ...[
+                  const SizedBox(height: 20),
+                  _buildWeekSelectorWithCopyButtons(),
+                  const SizedBox(height: 20),
+                  ..._buildScheduleEditor(),
+                  const SizedBox(height: 120), // место под FAB
+                ],
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -473,12 +638,10 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   Widget _buildGroupSelector() {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Theme.of(context).cardColor,
       child: Container(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -497,8 +660,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                 color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
-            SizedBox(height: 10),
-
+            const SizedBox(height: 10),
             if (isAddingNewGroup)
               Column(
                 children: [
@@ -511,9 +673,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                       ),
                     ),
                     textInputAction: TextInputAction.done,
-                    keyboardType: TextInputType.text,
                   ),
-                  SizedBox(height: 10),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       ElevatedButton(
@@ -525,16 +686,16 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: Text('Добавить'),
+                        child: const Text('Добавить'),
                       ),
-                      SizedBox(width: 10),
+                      const SizedBox(width: 10),
                       TextButton(
                         onPressed: () {
                           setState(() {
                             isAddingNewGroup = false;
                           });
                         },
-                        child: Text('Отмена'),
+                        child: const Text('Отмена'),
                       ),
                     ],
                   ),
@@ -551,18 +712,15 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   Widget _buildAnimatedDropdown() {
     return Column(
       children: [
-        // Кнопка для открытия/закрытия dropdown
         Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              setState(() {
-                _isDropdownOpen = !_isDropdownOpen;
-              });
+              setState(() => _isDropdownOpen = !_isDropdownOpen);
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border.all(
                   color: Theme.of(context).dividerColor,
@@ -572,27 +730,25 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.group,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 20,
-                  ),
-                  SizedBox(width: 12),
+                  Icon(Icons.group,
+                      color: Theme.of(context).colorScheme.primary, size: 20),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       selectedGroup ?? 'Выберите группу',
                       style: TextStyle(
                         color: selectedGroup != null
                             ? Theme.of(context).colorScheme.onBackground
-                            : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            : Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.6),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  RotationTransition(
-                    turns: _isDropdownOpen
-                        ? AlwaysStoppedAnimation(0.5)
-                        : AlwaysStoppedAnimation(0.0),
+                  Transform.rotate(
+                    angle: _isDropdownOpen ? 3.1415 : 0.0,
                     child: Icon(
                       Icons.arrow_drop_down,
                       color: Theme.of(context).colorScheme.primary,
@@ -603,11 +759,9 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
             ),
           ),
         ),
-        SizedBox(height: 8),
-
-        // Анимированный список групп
+        const SizedBox(height: 8),
         AnimatedContainer(
-          duration: Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
           height: _isDropdownOpen ? 200 : 0,
           decoration: BoxDecoration(
@@ -615,9 +769,9 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withOpacity(0.08),
                 blurRadius: 8,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -627,9 +781,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                // Опция добавления новой группы
                 ListTile(
-                  leading: Icon(Icons.add, size: 20),
+                  leading: const Icon(Icons.add, size: 20),
                   title: Text(
                     '+ Добавить новую группу',
                     style: TextStyle(color: AppColors.primary),
@@ -641,51 +794,48 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                     });
                   },
                 ),
-                Divider(height: 1),
-
-                // Список групп
-                ...groups.map((group) {
+                const Divider(height: 1),
+                ...groups.map((g) {
+                  final selected = selectedGroup == g;
                   return ListTile(
                     leading: Icon(
                       Icons.school,
                       size: 20,
-                      color: selectedGroup == group
+                      color: selected
                           ? Theme.of(context).colorScheme.primary
                           : Theme.of(context).colorScheme.onSurface,
                     ),
                     title: Text(
-                      group,
+                      g,
                       style: TextStyle(
-                        color: selectedGroup == group
+                        color: selected
                             ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onBackground,
-                        fontWeight: selectedGroup == group
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                            : Theme.of(context)
+                            .colorScheme
+                            .onBackground,
+                        fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
-                    trailing: selectedGroup == group
-                        ? Icon(
-                      Icons.check,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
-                    )
+                    trailing: selected
+                        ? Icon(Icons.check,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.primary)
                         : null,
                     onTap: () {
-                      setState(() {
-                        selectedGroup = group;
+                      _guardedChange(() {
+                        selectedGroup = g;
                         _isDropdownOpen = false;
                         isLoadingSchedule = true;
                       });
-                      // Автоматически загружаем расписание при выборе группы
                       _loadExistingSchedule();
                     },
                   );
-                }).toList(),
+                }),
               ],
             ),
           )
-              : SizedBox.shrink(),
+              : const SizedBox.shrink(),
         ),
       ],
     );
@@ -694,12 +844,10 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   Widget _buildWeekSelectorWithCopyButtons() {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Theme.of(context).cardColor,
       child: Container(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -718,49 +866,44 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                 color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: selectedWeek == 'upper' ? AppColors.primary : Colors.grey,
+                      backgroundColor: selectedWeek == 'upper'
+                          ? AppColors.primary
+                          : Colors.grey,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        selectedWeek = 'upper';
-                      });
-                    },
-                    child: Text('ВЕРХНЯЯ НЕДЕЛЯ'),
+                    onPressed: () => _onWeekChanged('upper'),
+                    child: const Text('ВЕРХНЯЯ НЕДЕЛЯ'),
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: selectedWeek == 'lower' ? Colors.green[700] : Colors.grey,
+                      backgroundColor:
+                      selectedWeek == 'lower' ? Colors.green : Colors.grey,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        selectedWeek = 'lower';
-                      });
-                    },
-                    child: Text('НИЖНЯЯ НЕДЕЛЯ'),
+                    onPressed: () => _onWeekChanged('lower'),
+                    child: const Text('НИЖНЯЯ НЕДЕЛЯ'),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'Копирование расписания:',
               style: TextStyle(
@@ -769,7 +912,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                 color: Theme.of(context).colorScheme.onBackground,
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -782,21 +925,21 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                       ),
                     ),
                     onPressed: _copyUpperToLowerWeek,
-                    child: Text('Верхняя → Нижняя'),
+                    child: const Text('Верхняя → Нижняя'),
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green[700],
-                      side: BorderSide(color: Colors.green[700]!),
+                      foregroundColor: Colors.green,
+                      side: const BorderSide(color: Colors.green),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     onPressed: _copyLowerToUpperWeek,
-                    child: Text('Нижняя → Верхняя'),
+                    child: const Text('Нижняя → Верхняя'),
                   ),
                 ),
               ],
@@ -808,7 +951,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   }
 
   List<Widget> _buildScheduleEditor() {
-    final schedule = selectedWeek == 'upper' ? upperWeekSchedule : lowerWeekSchedule;
+    final schedule = _weekMap;
 
     return daysOfWeek.map((day) {
       final dayLessons = schedule[day] ?? [];
@@ -818,10 +961,10 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        margin: EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 16),
         color: Theme.of(context).cardColor,
         child: Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -842,7 +985,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                       color: Theme.of(context).colorScheme.onBackground,
                     ),
                   ),
-                  Spacer(),
+                  const Spacer(),
                   IconButton(
                     icon: Icon(Icons.add, color: AppColors.primary),
                     onPressed: () => _addLesson(day),
@@ -851,7 +994,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
               ),
               Divider(color: Theme.of(context).dividerColor),
               if (dayLessons.isEmpty)
-                Center(
+                const Center(
                   child: Text(
                     'Нет занятий',
                     style: TextStyle(
@@ -865,7 +1008,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                   final index = entry.key;
                   final lesson = entry.value;
                   return _buildLessonEditor(day, index, lesson);
-                }).toList(),
+                }),
             ],
           ),
         ),
@@ -874,26 +1017,49 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   }
 
   Widget _buildLessonEditor(String day, int index, ScheduleItem lesson) {
-    // Проверяем, существует ли уже контроллер, если нет, создаем его
-    subjectControllers.putIfAbsent('$day-$index-${lesson.weekType}', () => TextEditingController(text: lesson.subject));
-    classroomControllers.putIfAbsent('$day-$index-${lesson.weekType}', () => TextEditingController(text: lesson.classroom));
-    teacherControllers.putIfAbsent('$day-$index-${lesson.weekType}', () => TextEditingController(text: lesson.teacher));
+    final key = _ctrlKey(day, index, selectedWeek);
 
-    subjectControllers['$day-$index-${lesson.weekType}']!.addListener(() {
-      _updateLesson(day, index, lesson.copyWith(subject: subjectControllers['$day-$index-${lesson.weekType}']!.text));
+    // Листенеры теперь всегда читают АКТУАЛЬНЫЙ элемент из state,
+    // чтобы правки не терялись.
+    subjectControllers.putIfAbsent(key, () {
+      final c = TextEditingController(text: lesson.subject);
+      c.addListener(() {
+        final schedule = _weekMap;
+        if (schedule.containsKey(day) && index < schedule[day]!.length) {
+          final curr = schedule[day]![index];
+          _updateLesson(day, index, curr.copyWith(subject: c.text));
+        }
+      });
+      return c;
     });
 
-    classroomControllers['$day-$index-${lesson.weekType}']!.addListener(() {
-      _updateLesson(day, index, lesson.copyWith(classroom: classroomControllers['$day-$index-${lesson.weekType}']!.text));
+    teacherControllers.putIfAbsent(key, () {
+      final c = TextEditingController(text: lesson.teacher);
+      c.addListener(() {
+        final schedule = _weekMap;
+        if (schedule.containsKey(day) && index < schedule[day]!.length) {
+          final curr = schedule[day]![index];
+          _updateLesson(day, index, curr.copyWith(teacher: c.text));
+        }
+      });
+      return c;
     });
 
-    teacherControllers['$day-$index-${lesson.weekType}']!.addListener(() {
-      _updateLesson(day, index, lesson.copyWith(teacher: teacherControllers['$day-$index-${lesson.weekType}']!.text));
+    classroomControllers.putIfAbsent(key, () {
+      final c = TextEditingController(text: lesson.classroom);
+      c.addListener(() {
+        final schedule = _weekMap;
+        if (schedule.containsKey(day) && index < schedule[day]!.length) {
+          final curr = schedule[day]![index];
+          _updateLesson(day, index, curr.copyWith(classroom: c.text));
+        }
+      });
+      return c;
     });
 
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border.all(color: Theme.of(context).dividerColor),
@@ -910,16 +1076,16 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                   color: Theme.of(context).colorScheme.onBackground,
                 ),
               ),
-              Spacer(),
+              const Spacer(),
               IconButton(
-                icon: Icon(Icons.delete, color: Colors.red),
+                icon: const Icon(Icons.delete, color: Colors.red),
                 onPressed: () => _removeLesson(day, index),
               ),
             ],
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           TextField(
-            controller: subjectControllers['$day-$index-${lesson.weekType}'],
+            controller: subjectControllers[key],
             decoration: InputDecoration(
               labelText: 'Название предмета',
               border: OutlineInputBorder(
@@ -927,28 +1093,25 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
               ),
             ),
             textInputAction: TextInputAction.next,
-            keyboardType: TextInputType.text,
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           TextField(
-            controller: teacherControllers['$day-$index-${lesson.weekType}'],
+            controller: teacherControllers[key],
             decoration: InputDecoration(
               labelText: 'ФИО преподавателя',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            textInputAction: TextInputAction.done,
-            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.next,
           ),
-          SizedBox(height: 8),
-          // Новая строка с кабинетом и типом занятия
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                flex: 1, // 1/3 ширины
+                flex: 1,
                 child: TextField(
-                  controller: classroomControllers['$day-$index-${lesson.weekType}'],
+                  controller: classroomControllers[key],
                   decoration: InputDecoration(
                     labelText: 'Кабинет',
                     border: OutlineInputBorder(
@@ -956,12 +1119,11 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                     ),
                   ),
                   textInputAction: TextInputAction.next,
-                  keyboardType: TextInputType.text,
                 ),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
-                flex: 2, // 2/3 ширины
+                flex: 2,
                 child: DropdownButtonFormField<String>(
                   value: lesson.type,
                   decoration: InputDecoration(
@@ -970,15 +1132,20 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  items: lessonTypes.map((type) {
-                    return DropdownMenuItem(
-                      value: type,
-                      child: Text(_getLessonTypeName(type)),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      _updateLesson(day, index, lesson.copyWith(type: value));
+                  items: lessonTypes
+                      .map((t) => DropdownMenuItem(
+                    value: t,
+                    child: Text(_typeName(t)),
+                  ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      final schedule = _weekMap;
+                      if (schedule.containsKey(day) &&
+                          index < schedule[day]!.length) {
+                        final curr = schedule[day]![index];
+                        _updateLesson(day, index, curr.copyWith(type: v));
+                      }
                     }
                   },
                 ),
@@ -990,17 +1157,22 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
     );
   }
 
-    String _getLessonTypeName(String type) {
-    switch (type) {
-    case 'лекц': return 'Лекция';
-    case 'пр': return 'Практика';
-    case 'лб': return 'Лабораторная';
-    default: return type;
-    }
+  String _typeName(String t) {
+    switch (t) {
+      case 'лекц':
+        return 'Лекция';
+      case 'пр':
+        return 'Практика';
+      case 'лб':
+        return 'Лабораторная';
+      default:
+        return t;
     }
   }
+}
 
-  class ScheduleItem {
+// ====== МОДЕЛЬ ДЛЯ ЭТОГО ЭКРАНА =============================================
+class ScheduleItem {
   final int lessonNumber;
   final String subject;
   final String teacher;
@@ -1009,50 +1181,48 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   final String weekType;
 
   ScheduleItem({
-  required this.lessonNumber,
-  required this.subject,
-  required this.teacher,
-  required this.classroom,
-  required this.type,
-  required this.weekType,
+    required this.lessonNumber,
+    required this.subject,
+    required this.teacher,
+    required this.classroom,
+    required this.type,
+    required this.weekType,
   });
 
   ScheduleItem copyWith({
-  int? lessonNumber,
-  String? subject,
-  String? teacher,
-  String? classroom,
-  String? type,
-  String? weekType,
+    int? lessonNumber,
+    String? subject,
+    String? teacher,
+    String? classroom,
+    String? type,
+    String? weekType,
   }) {
-  return ScheduleItem(
-  lessonNumber: lessonNumber ?? this.lessonNumber,
-  subject: subject ?? this.subject,
-  teacher: teacher ?? this.teacher,
-  classroom: classroom ?? this.classroom,
-  type: type ?? this.type,
-  weekType: weekType ?? this.weekType,
-  );
+    return ScheduleItem(
+      lessonNumber: lessonNumber ?? this.lessonNumber,
+      subject: subject ?? this.subject,
+      teacher: teacher ?? this.teacher,
+      classroom: classroom ?? this.classroom,
+      type: type ?? this.type,
+      weekType: weekType ?? this.weekType,
+    );
   }
 
-  Map<String, dynamic> toJson() {
-  return {
-  'lesson_number': lessonNumber,
-  'subject': subject,
-  'teacher': teacher,
-  'classroom': classroom,
-  'type': type,
+  Map<String, dynamic> toJson() => {
+    'lesson_number': lessonNumber,
+    'subject': subject,
+    'teacher': teacher,
+    'classroom': classroom,
+    'type': type, // сервер ожидает ключ 'type'
   };
-  }
 
   static ScheduleItem fromJson(Map<String, dynamic> json) {
-  return ScheduleItem(
-  lessonNumber: json['lesson_number'],
-  subject: json['subject'],
-  teacher: json['teacher'],
-  classroom: json['classroom'],
-  type: json['type'],
-  weekType: '', // Это поле будет установлено позже
-  );
+    return ScheduleItem(
+      lessonNumber: json['lesson_number'] as int,
+      subject: (json['subject'] ?? '') as String,
+      teacher: (json['teacher'] ?? '') as String,
+      classroom: (json['classroom'] ?? '') as String,
+      type: (json['type'] ?? '') as String,
+      weekType: '', // заполняем позже copyWith при загрузке
+    );
   }
-  }
+}
