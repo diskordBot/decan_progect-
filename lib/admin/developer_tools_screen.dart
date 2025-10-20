@@ -1,12 +1,15 @@
+// lib/admin/developer_tools_screen.dart
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+
 import 'package:decanat_progect/constants.dart';
 import 'package:decanat_progect/widgets/custom_app_bar.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:decanat_progect/admin/admin_schedule_teacher_editor.dart';
-import 'dart:async';
-
+import 'package:decanat_progect/ui/overlay_toast.dart';
+import 'package:decanat_progect/screens/profile_screen.dart';
 
 class DeveloperToolsScreen extends StatefulWidget {
   const DeveloperToolsScreen({super.key});
@@ -15,13 +18,20 @@ class DeveloperToolsScreen extends StatefulWidget {
   State<DeveloperToolsScreen> createState() => _DeveloperToolsScreenState();
 }
 
-class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with SingleTickerProviderStateMixin {
+class _DeveloperToolsScreenState extends State<DeveloperToolsScreen>
+    with SingleTickerProviderStateMixin {
+  // Приложение показывает время в UTC+6 (MSK+3)
+  static const int kAppTzOffsetHoursFromUtc = 6;
+  static const bool kNaiveIsMsk = false;
+
   List<dynamic> _users = [];
   List<dynamic> _filteredUsers = [];
   List<dynamic> _filteredStudentsTeachers = [];
   bool _isLoading = true;
+
   String? _userId;
   String _userRole = 'user';
+
   final TextEditingController _searchController = TextEditingController();
   late TabController _tabController;
 
@@ -32,7 +42,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
     super.initState();
     _searchController.addListener(_filterUsers);
     _loadUserData();
-    _loadUsers(); // берём расширенный /api/users (с ФИО/группой/online)
+    _loadUsers();
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -62,21 +72,29 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
           _isLoading = false;
         });
       } else {
-        _showSnackBar('Ошибка загрузки пользователей');
+        _toast('Ошибка загрузки пользователей', icon: Icons.warning_amber_rounded);
         setState(() => _isLoading = false);
       }
-    } catch (e) {
-      _showSnackBar('Ошибка подключения к серверу');
+    } catch (_) {
+      _toast('Ошибка подключения к серверу', icon: Icons.warning_amber_rounded);
       setState(() => _isLoading = false);
     }
   }
 
   void _sortAndFilterUsers() {
     _users.sort((a, b) {
+      if (a['user_id'] == '000000') return -1;
+      if (b['user_id'] == '000000') return 1;
+
       const roleOrder = {'developer': 0, 'admin': 1, 'teacher': 2, 'student': 3, 'user': 4};
       final ar = a['role'] ?? 'user';
       final br = b['role'] ?? 'user';
-      return (roleOrder[ar] ?? 4).compareTo(roleOrder[br] ?? 4);
+      final cmpRole = (roleOrder[ar] ?? 4).compareTo(roleOrder[br] ?? 4);
+      if (cmpRole != 0) return cmpRole;
+
+      final au = (a['user_id'] ?? '').toString();
+      final bu = (b['user_id'] ?? '').toString();
+      return au.compareTo(bu);
     });
     _filterUsers();
   }
@@ -94,7 +112,6 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
         final role = _getRoleName(u['role'] ?? 'user').toLowerCase();
         final fullName = (u['full_name'] ?? '').toString().toLowerCase();
         final login = (u['login'] ?? '').toString().toLowerCase();
-        // device_info убран из поиска
         return userId.contains(q) || role.contains(q) || fullName.contains(q) || login.contains(q);
       }).toList();
     }
@@ -128,14 +145,128 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
     });
   }
 
+  // ===== Уведомления (кастомные тосты) =====
+  void _toast(String msg, {IconData icon = Icons.info_outline_rounded, Color? accent}) {
+    OverlayToast.instance.show(msg, icon: icon, accent: accent ?? AppColors.accent);
+  }
+
+  // ===== Работа со временем и таймзонами =====
+  bool _hasTz(String s) => s.endsWith('Z') || RegExp(r'[+\-]\d{2}:\d{2}$').hasMatch(s);
+
+  DateTime _parseServerTimeToUtc(String isoMaybeNaive) {
+    final s = isoMaybeNaive.trim();
+    if (_hasTz(s)) {
+      final dt = DateTime.parse(s);
+      return dt.isUtc ? dt : dt.toUtc();
+    }
+    final naive = DateTime.parse(s);
+    if (kNaiveIsMsk) {
+      final utc = DateTime.utc(
+        naive.year, naive.month, naive.day,
+        naive.hour, naive.minute, naive.second, naive.millisecond, naive.microsecond,
+      ).subtract(const Duration(hours: 3));
+      return utc;
+    } else {
+      return DateTime.utc(
+        naive.year, naive.month, naive.day,
+        naive.hour, naive.minute, naive.second, naive.millisecond, naive.microsecond,
+      );
+    }
+  }
+
+  DateTime _toAppTz(DateTime utc) => utc.add(const Duration(hours: kAppTzOffsetHoursFromUtc));
+
+  String _tzSuffix() => 'UTC${kAppTzOffsetHoursFromUtc >= 0 ? '+' : ''}$kAppTzOffsetHoursFromUtc';
+
+  String _formatDateTimeAppTz(String iso) {
+    try {
+      if (iso.isEmpty) return '—';
+      final utc = _parseServerTimeToUtc(iso);
+      final local = _toAppTz(utc);
+      final m = local.month.toString().padLeft(2, '0');
+      final d = local.day.toString().padLeft(2, '0');
+      final hh = local.hour.toString().padLeft(2, '0');
+      final mm = local.minute.toString().padLeft(2, '0');
+      return '$d.$m.${local.year} $hh:$mm';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _formatLastSeenRelativeAppTz(String iso) {
+    try {
+      if (iso.isEmpty) return 'офлайн';
+      final utc = _parseServerTimeToUtc(iso);
+      final local = _toAppTz(utc);
+      final nowLocal = _toAppTz(DateTime.now().toUtc());
+      final diff = nowLocal.difference(local);
+
+      if (diff.inSeconds.abs() <= 30) return 'только что';
+      if (diff.inMinutes < 1) return '${diff.inSeconds} сек назад';
+      if (diff.inHours < 1) return '${diff.inMinutes} мин назад';
+      if (diff.inHours < 12) return '${diff.inHours} ч назад';
+
+      return _formatDateTimeAppTz(iso);
+    } catch (_) {
+      return _formatDateTimeAppTz(iso);
+    }
+  }
+
+  // ===== Роли/цвета/иконки =====
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'developer':
+        return Colors.purple;
+      case 'admin':
+        return Colors.blue;
+      case 'teacher':
+        return Colors.green;
+      case 'student':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getRoleName(String role) {
+    switch (role) {
+      case 'developer':
+        return 'Разработчик';
+      case 'admin':
+        return 'Администратор';
+      case 'teacher':
+        return 'Преподаватель';
+      case 'student':
+        return 'Студент';
+      default:
+        return 'Пользователь';
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'developer':
+        return Icons.developer_mode;
+      case 'admin':
+        return Icons.admin_panel_settings;
+      case 'teacher':
+        return Icons.person;
+      case 'student':
+        return Icons.school;
+      default:
+        return Icons.person_outline;
+    }
+  }
+
+  // ===== Действия с ролями =====
   void _confirmMakeDeveloper(Map<String, dynamic> user) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Подтверждение действия'),
+        title: const Text('Подтверждение'),
         content: Text(
-          'Вы уверены, что хотите сделать пользователя ${user['user_id']} разработчиком?\n\n'
-              '⚠️ Это действие нельзя будет отменить! Разработчики имеют полный доступ.',
+          'Сделать пользователя ${user['user_id']} разработчиком?\n\n'
+              '⚠️ Это действие необратимо (полный доступ).',
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
@@ -145,7 +276,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
               Navigator.pop(context);
               _updateUserRole(user['user_id'], 'developer');
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
             child: const Text('Сделать разработчиком'),
           ),
         ],
@@ -161,13 +292,13 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
         body: json.encode({'user_id': userId, 'role': newRole}),
       );
       if (response.statusCode == 200) {
-        _showSnackBar('Роль пользователя обновлена');
+        _toast('Роль обновлена', icon: Icons.check_circle_rounded, accent: Colors.green);
         _loadUsers();
       } else {
-        _showSnackBar('Ошибка обновления роли');
+        _toast('Ошибка обновления роли', icon: Icons.warning_amber_rounded);
       }
     } catch (_) {
-      _showSnackBar('Ошибка подключения');
+      _toast('Ошибка подключения', icon: Icons.warning_amber_rounded);
     }
   }
 
@@ -175,110 +306,78 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
     try {
       final response = await http.delete(Uri.parse('${AppConfig.serverUrl}/api/users/$userId/admin'));
       if (response.statusCode == 200) {
-        _showSnackBar('Права администратора сняты');
+        _toast('Права администратора сняты', icon: Icons.check_circle_rounded, accent: Colors.green);
         _loadUsers();
       } else {
         final errorData = json.decode(response.body);
-        _showSnackBar(errorData['detail'] ?? 'Ошибка снятия прав');
+        _toast(errorData['detail'] ?? 'Ошибка снятия прав', icon: Icons.warning_amber_rounded);
       }
     } catch (e) {
-      _showSnackBar('Ошибка подключения: $e');
+      _toast('Ошибка подключения: $e', icon: Icons.warning_amber_rounded);
     }
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
-  }
+  // ===== Профиль =====
+  void _openUserProfile(Map<String, dynamic> user) {
+    final String uid = (user['user_id'] ?? '').toString();
+    final String role = (user['role'] ?? 'user').toString();
 
-  String _formatDateTime(String dateTime) {
-    try {
-      final date = DateTime.parse(dateTime);
-      final m = date.month.toString().padLeft(2, '0');
-      final d = date.day.toString().padLeft(2, '0');
-      final hh = date.hour.toString().padLeft(2, '0');
-      final mm = date.minute.toString().padLeft(2, '0');
-      return '$d.$m.${date.year} $hh:$mm';
-    } catch (_) {
-      return dateTime;
+    if (uid.isEmpty) {
+      _toast('Некорректный ID пользователя', icon: Icons.warning_amber_rounded);
+      return;
     }
-  }
 
-  Color _getRoleColor(String role) {
-    switch (role) {
-      case 'developer': return Colors.purple;
-      case 'admin': return Colors.blue;
-      case 'teacher': return Colors.green;
-      case 'student': return Colors.orange;
-      default: return Colors.grey;
-    }
-  }
+    final bool canEdit = _userRole == 'developer';
 
-  String _getRoleName(String role) {
-    switch (role) {
-      case 'developer': return 'Разработчик';
-      case 'admin': return 'Администратор';
-      case 'teacher': return 'Преподаватель';
-      case 'student': return 'Студент';
-      default: return 'Пользователь';
-    }
-  }
-
-  IconData _getRoleIcon(String role) {
-    switch (role) {
-      case 'developer': return Icons.developer_mode;
-      case 'admin': return Icons.admin_panel_settings;
-      case 'teacher': return Icons.person;
-      case 'student': return Icons.school;
-      default: return Icons.person;
-    }
-  }
-
-  Widget _buildOnlineChip(Map<String, dynamic> user) {
-    final bool online = (user['online'] ?? false) == true;
-    final String? lastSeen = user['last_seen'] as String?;
-    return Chip(
-      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-      avatar: CircleAvatar(
-        radius: 6,
-        backgroundColor: online ? Colors.green : Colors.grey,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          userIdOverride: uid,
+          roleOverride: role,
+          readOnly: !canEdit,
+        ),
       ),
-      label: Text(
-        online ? 'Онлайн' : 'Офлайн${lastSeen != null ? ' • ${_formatDateTime(lastSeen)}' : ''}',
-        style: const TextStyle(fontSize: 12),
-      ),
-      backgroundColor: (online ? Colors.green : Colors.grey).withOpacity(0.12),
-      side: BorderSide(color: online ? Colors.green : Colors.grey),
     );
   }
 
+  // ===== Виджеты статистики/списков =====
   Widget _buildStatCard(String title, int count, Color color) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          children: [
-            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            Text('$count', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: color.withOpacity(.5)),
+        borderRadius: BorderRadius.circular(10),
+        color: color.withOpacity(.06),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+          const SizedBox(height: 2),
+          Text('$count', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+        ],
       ),
     );
   }
 
   Widget _buildStatistics(List<dynamic> users, bool isAllUsersTab) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
             _buildStatCard('Всего', users.length, Colors.grey),
-            if (isAllUsersTab) _buildStatCard('Разработчики', users.where((u) => u['role'] == 'developer').length, Colors.purple),
-            if (isAllUsersTab) _buildStatCard('Админы', users.where((u) => u['role'] == 'admin').length, Colors.blue),
-            if (!isAllUsersTab) _buildStatCard('Преподаватели', users.where((u) => u['role'] == 'teacher').length, Colors.green),
-            if (!isAllUsersTab) _buildStatCard('Студенты', users.where((u) => u['role'] == 'student').length, Colors.orange),
-            if (isAllUsersTab) _buildStatCard('Пользователи', users.where((u) => u['role'] == 'user').length, Colors.grey[600]!),
+            if (isAllUsersTab)
+              _buildStatCard('Админы', users.where((u) => u['role'] == 'admin').length, Colors.blue),
+            if (!isAllUsersTab)
+              _buildStatCard('Преподаватели', users.where((u) => u['role'] == 'teacher').length, Colors.green),
+            if (!isAllUsersTab)
+              _buildStatCard('Студенты', users.where((u) => u['role'] == 'student').length, Colors.orange),
+            if (isAllUsersTab)
+              _buildStatCard('Пользователи', users.where((u) => u['role'] == 'user').length, Colors.grey[600]!),
             _buildStatCard('Онлайн', users.where((u) => (u['online'] ?? false) == true).length, Colors.green),
           ],
         ),
@@ -286,118 +385,216 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
     );
   }
 
+  // ===== Карточка пользователя =====
   Widget _buildUserCard(Map<String, dynamic> user) {
     final isCurrentUser = user['user_id'] == _userId;
     final isSystemDeveloper = user['user_id'] == '000000';
-    final role = (user['role'] ?? 'user') as String;
 
+    final role = (user['role'] ?? 'user') as String;
+    final String uid = (user['user_id'] ?? '').toString();
     final String? fullName = user['full_name'];
+    final String login = (user['login'] ?? '').toString();
     final String? groupName = user['group_name'];
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    final bool online = (user['online'] ?? false) == true;
+    final String lastSeenIso = (user['last_seen'] ?? '') as String;
+
+    final roleColor = _getRoleColor(role);
+    final roleIcon = _getRoleIcon(role);
+
+    // Выпадающее меню ролей (с иконками и цветами)
+    Widget roleMenu() {
+      return PopupMenuButton<String>(
+        tooltip: 'Назначить роль',
+        onSelected: (value) {
+          if (value == 'developer') {
+            _confirmMakeDeveloper(user);
+          } else if (value == 'remove_admin') {
+            _removeAdminRole(uid);
+          } else {
+            _updateUserRole(uid, value);
+          }
+        },
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        itemBuilder: (ctx) => [
+          _roleItem('developer', 'Разработчик', Icons.developer_mode, Colors.purple),
+          _roleItem('admin', 'Администратор', Icons.admin_panel_settings, Colors.blue),
+          _roleItem('teacher', 'Преподаватель', Icons.person, Colors.green),
+          _roleItem('student', 'Студент', Icons.school, Colors.orange),
+          _roleItem('user', 'Пользователь', Icons.person_outline, Colors.grey),
+          if (role == 'admin')
+            _roleItem('remove_admin', 'Снять админа', Icons.remove_moderator, Colors.red),
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: roleColor.withOpacity(.4)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(roleIcon, color: roleColor, size: 18),
+              const SizedBox(width: 6),
+              Text(_getRoleName(role),
+                  style: TextStyle(fontWeight: FontWeight.w600, color: roleColor, fontSize: 13)),
+              const SizedBox(width: 4),
+              Icon(Icons.arrow_drop_down, color: roleColor, size: 18),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // онлайн/офлайн компактно
+    Widget onlineChip() {
+      final label = online ? 'Онлайн' : (lastSeenIso.isNotEmpty ? _formatLastSeenRelativeAppTz(lastSeenIso) : 'Офлайн');
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: (online ? Colors.green : Colors.grey).withOpacity(.12),
+          border: Border.all(color: online ? Colors.green : Colors.grey),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: online ? Colors.green : Colors.grey, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    // Карточка
+    return InkWell(
+      onTap: () => _openUserProfile(user),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Theme.of(context).dividerColor),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(.06), blurRadius: 8, offset: const Offset(0, 4)),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Верхняя строка
+            // Верхняя строка: ИКОНКА + ID + меню ролей
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // круглая иконка роли слева
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: _getRoleColor(role).withOpacity(0.1),
+                    color: roleColor.withOpacity(.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(_getRoleIcon(role), color: _getRoleColor(role), size: 20),
+                  child: Icon(roleIcon, color: roleColor, size: 20),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
+                // КРУПНО: ID
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('ID: ${user['user_id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(_getRoleName(role), style: TextStyle(color: _getRoleColor(role), fontSize: 14, fontWeight: FontWeight.w500)),
-                    ],
+                  child: Text(
+                    'ID: $uid',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
                   ),
                 ),
-                if (isCurrentUser)
-                  const Chip(label: Text('Вы', style: TextStyle(fontSize: 12)), backgroundColor: Colors.orange),
+                const SizedBox(width: 8),
+                if (user['user_id'] == '000000')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(.1),
+                      border: Border.all(color: Colors.purple),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text('Системный разработчик', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purple)),
+                  )
+                else
+                  roleMenu(),
               ],
             ),
 
-            const SizedBox(height: 8),
-
-            // ФИО
-            if (fullName != null && fullName.isNotEmpty)
-              Text('ФИО: $fullName', style: const TextStyle(fontSize: 13)),
-
-            // Группа только для студентов
-            if (role == 'student' && groupName != null && groupName.isNotEmpty)
-              Text('Группа: $groupName', style: const TextStyle(fontSize: 13)),
-
-            // Даты
             const SizedBox(height: 6),
-            Text('Создан: ${_formatDateTime(user['created_at'] ?? '')}', style: const TextStyle(fontSize: 12)),
-            if (user['updated_at'] != null)
-              Text('Обновлён: ${_formatDateTime(user['updated_at'])}', style: const TextStyle(fontSize: 12)),
 
-            const SizedBox(height: 8),
+            // ФИО/логин в одну компактную строку
+            Row(
+              children: [
+                Icon(Icons.person_outline, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    (fullName != null && fullName.isNotEmpty) ? fullName : (login.isNotEmpty ? login : 'Без имени'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13.5, color: Theme.of(context).colorScheme.onSurface.withOpacity(.85)),
+                  ),
+                ),
+                if (isCurrentUser) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(.15),
+                      border: Border.all(color: Colors.orange),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text('Вы', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange)),
+                  ),
+                ],
+              ],
+            ),
 
-            // Онлайн/офлайн
-            _buildOnlineChip(user),
-
-            const SizedBox(height: 12),
-
-            if (!isSystemDeveloper)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            if (role == 'student' && (groupName ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
                 children: [
-                  if (role == 'admin')
-                    ElevatedButton(
-                      onPressed: () => _removeAdminRole(user['user_id']),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                      child: const Text('Снять админа'),
-                    ),
-                  if (role == 'user' || role == 'student' || role == 'teacher')
-                    ElevatedButton(
-                      onPressed: () => _updateUserRole(user['user_id'], 'admin'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                      child: const Text('Сделать админом'),
-                    ),
-                  if (role == 'admin')
-                    ElevatedButton(
-                      onPressed: () => _confirmMakeDeveloper(user),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
-                      child: const Text('В разработчики'),
-                    ),
-                  if (role == 'admin' || role == 'developer' || role == 'teacher')
-                    ElevatedButton(
-                      onPressed: () => _updateUserRole(user['user_id'], 'user'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      child: const Text('В пользователи'),
-                    ),
-                  if (role == 'user' || role == 'admin' || role == 'developer')
-                    ElevatedButton(
-                      onPressed: () => _updateUserRole(user['user_id'], 'teacher'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                      child: const Text('В преподаватели'),
-                    ),
-                  if (role == 'user' || role == 'admin' || role == 'developer' || role == 'teacher')
-                    ElevatedButton(
-                      onPressed: () => _updateUserRole(user['user_id'], 'student'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                      child: const Text('В студенты'),
-                    ),
+                  Icon(Icons.group_outlined, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 6),
+                  Text('Группа: $groupName', style: const TextStyle(fontSize: 12.5)),
                 ],
               ),
-            if (isSystemDeveloper)
-              Text('Системный разработчик (нельзя изменить)', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ],
+
+            const SizedBox(height: 8),
+            // нижняя строка: online + создан
+            Row(
+              children: [
+                onlineChip(),
+                const SizedBox(width: 10),
+                Icon(Icons.event, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Text(
+                  'Создан: ${_formatDateTimeAppTz(user['created_at'] ?? '')}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _roleItem(String value, String title, IconData icon, Color color) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
@@ -412,7 +609,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       itemCount: users.length,
       itemBuilder: (_, i) => _buildUserCard(users[i]),
     );
@@ -427,34 +624,44 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
       );
     }
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Управление пользователями'),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.yellowAccent,
-          tabs: const [Tab(text: 'Пользователи'), Tab(text: 'Студ. и препод.')],
+          indicatorColor: scheme.onPrimary,
+          tabs: const [
+            Tab(text: 'Пользователи'),
+            Tab(text: 'Студ. и препод.'),
+          ],
         ),
       ),
       body: Column(
         children: [
+          // Поиск
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 labelText: 'Поиск по ID, ФИО, логину, группе и т.д.',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(icon: const Icon(Icons.clear), onPressed: _searchController.clear)
                     : null,
               ),
             ),
           ),
+          // Контент вкладок
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -465,7 +672,10 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
                     Expanded(
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
-                          : RefreshIndicator(onRefresh: _loadUsers, child: _buildUsersList(_filteredUsers)),
+                          : RefreshIndicator(
+                        onRefresh: _loadUsers,
+                        child: _buildUsersList(_filteredUsers),
+                      ),
                     ),
                   ],
                 ),
@@ -475,7 +685,10 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> with Single
                     Expanded(
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
-                          : RefreshIndicator(onRefresh: _loadUsers, child: _buildUsersList(_filteredStudentsTeachers)),
+                          : RefreshIndicator(
+                        onRefresh: _loadUsers,
+                        child: _buildUsersList(_filteredStudentsTeachers),
+                      ),
                     ),
                   ],
                 ),

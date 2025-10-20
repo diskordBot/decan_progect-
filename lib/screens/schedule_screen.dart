@@ -1,10 +1,13 @@
 // lib/screens/schedule_screen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../widgets/custom_app_bar.dart';
 import '../constants.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+// кастомные уведомления
+import 'package:decanat_progect/ui/overlay_toast.dart';
 
 class ScheduleWeek {
   final String weekName;
@@ -80,13 +83,19 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   bool _isLoadingSchedule = false;
   bool _isOfflineData = false;
 
+  // -------- кастомные тосты (шорткаты) --------
+  void _toastInfo(String msg) =>
+      OverlayToast.instance.info(msg, position: ToastPosition.top);
+  void _toastError(String msg) =>
+      OverlayToast.instance.error(msg, position: ToastPosition.top);
+
   @override
   void initState() {
     super.initState();
-    _animationController =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _dropdownController =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _animationController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
+    _dropdownController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 400));
     _dropdownAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _dropdownController, curve: Curves.easeInOut),
     );
@@ -156,6 +165,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       await _loadSchedule();
     } else {
       _currentSchedule = null;
+      _toastError('Не удалось определить группу студента');
     }
     _isLoadingProfile = false;
     if (mounted) setState(() {});
@@ -192,9 +202,12 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         });
       } else {
         _loadFallbackGroups();
+        _toastError(
+            'Не удалось получить список групп с сервера — показан шаблонный список');
       }
     } catch (e) {
       _loadFallbackGroups();
+      _toastError('Сеть недоступна — показан шаблонный список групп');
     }
   }
 
@@ -235,7 +248,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> scheduleData = json.decode(response.body);
+        final Map<String, dynamic> scheduleData =
+        json.decode(response.body) as Map<String, dynamic>;
         final parsed = _parseScheduleFromJson(scheduleData);
 
         final prefs = await SharedPreferences.getInstance();
@@ -249,6 +263,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
           _isLoadingSchedule = false;
           _isOfflineData = false;
         });
+        _toastInfo('Расписание обновлено');
       } else {
         await _loadCachedSchedule();
       }
@@ -263,17 +278,19 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     prefs.getString('schedule_${_selectedGroup}_$_selectedWeek');
 
     if (cached != null) {
-      final scheduleData = json.decode(cached);
+      final scheduleData = json.decode(cached) as Map<String, dynamic>;
       setState(() {
         _currentSchedule = _parseScheduleFromJson(scheduleData);
         _isLoadingSchedule = false;
         _isOfflineData = true;
       });
+      _toastInfo('Показана офлайн-версия расписания');
     } else {
       setState(() {
         _currentSchedule = null;
         _isLoadingSchedule = false;
       });
+      _toastError('Не удалось загрузить расписание');
     }
   }
 
@@ -322,6 +339,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     _animationController
       ..reset()
       ..forward();
+
+    _toastInfo('Группа выбрана: $group');
   }
 
   Future<void> _refreshPage() async {
@@ -363,7 +382,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                       child: _isStudent
                           ? const Text(
                           'Не удалось определить вашу группу. Проверьте подключение.')
-                          : const Text('Выберите группу для отображения расписания'),
+                          : const Text(
+                          'Выберите группу для отображения расписания'),
                     )
                   else
                     const Center(
@@ -377,97 +397,113 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     );
   }
 
+  // ------------------- КОМПАКТНЫЙ СЕЛЕКТОР НЕДЕЛИ -------------------
   Widget _buildWeekSelector(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.05),
-            ],
+    final isLower = _selectedWeek == 'lower';
+    final bg = Theme.of(context).colorScheme.surface;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border:
+        Border.all(color: Theme.of(context).dividerColor.withOpacity(.4)),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          _weekChip(
+            context,
+            label: 'НИЖНЯЯ',
+            selected: isLower,
+            onTap: () {
+              setState(() => _selectedWeek = 'lower');
+              _saveSelectedWeek('lower');
+              _loadSchedule();
+              _toastInfo('Выбрана нижняя неделя');
+            },
           ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Текущая неделя:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onBackground,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _weekButton(context, 'НИЖНЯЯ НЕДЕЛЯ', 'lower', Icons.arrow_downward),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _weekButton(context, 'ВЕРХНЯЯ НЕДЕЛЯ', 'upper', Icons.arrow_upward),
-                  ),
-                ],
-              ),
-            ],
+          const SizedBox(width: 6),
+          _weekChip(
+            context,
+            label: 'ВЕРХНЯЯ',
+            selected: !isLower,
+            onTap: () {
+              setState(() => _selectedWeek = 'upper');
+              _saveSelectedWeek('upper');
+              _loadSchedule();
+              _toastInfo('Выбрана верхняя неделя');
+            },
           ),
-        ),
+          const SizedBox(width: 8),
+          Icon(Icons.cached, size: 16, color: Theme.of(context).hintColor),
+          const SizedBox(width: 4),
+          Text(
+            isLower ? 'Нижняя' : 'Верхняя',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _weekButton(BuildContext context, String text, String weekType, IconData icon) {
-    final isSelected = _selectedWeek == weekType;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        gradient: isSelected
-            ? LinearGradient(colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)])
-            : LinearGradient(colors: [
-          Theme.of(context).colorScheme.surface.withOpacity(0.8),
-          Theme.of(context).colorScheme.surface.withOpacity(0.6),
-        ]),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: isSelected
-            ? [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
-            : [BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() => _selectedWeek = weekType);
-            _saveSelectedWeek(weekType);
-            _loadSchedule();
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18, color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface),
-                const SizedBox(height: 6),
-                Text(
-                  text,
-                  textAlign: TextAlign.center,
+  Widget _weekChip(
+      BuildContext context, {
+        required String label,
+        required bool selected,
+        required VoidCallback onTap,
+      }) {
+    return Expanded(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(colors: [
+            Colors.blue[700]!,
+            Colors.blue[700]!.withOpacity(.85),
+          ])
+              : null,
+          color: selected ? null : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? Colors.blue[700]!.withOpacity(.45)
+                : Theme.of(context).dividerColor,
+          ),
+          boxShadow: selected
+              ? [
+            BoxShadow(
+              color: Colors.blue[700]!.withOpacity(.20),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            )
+          ]
+              : [],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: Text(
+                  label,
                   style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11.5,
-                    color: isSelected ? Colors.white : Theme.of(context).colorScheme.onBackground,
+                    color: selected
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    letterSpacing: .2,
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -475,19 +511,31 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     );
   }
 
+  // ------------------- ВЫВОД РАСПИСАНИЯ -------------------
   Widget _buildScheduleDisplay(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 6),
+        if (_isOfflineData)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Оффлайн-данные (кэш)',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
         ..._currentSchedule!.days.asMap().entries.map((entry) {
           final index = entry.key;
           final day = entry.value;
           return AnimatedOpacity(
             opacity: 1.0,
-            duration: Duration(milliseconds: 300 + (index * 100)),
+            duration: Duration(milliseconds: 250 + (index * 80)),
             child: Transform.translate(
-              offset: Offset(0, index * 8.0),
+              offset: Offset(0, index * 6.0),
               child: _buildDaySchedule(context, day),
             ),
           );
@@ -496,6 +544,258 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     );
   }
 
+  // Компактная карточка дня
+  Widget _buildDaySchedule(BuildContext context, ScheduleDay day) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      day.dayName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${day.items.length} пар',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (day.items.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      '🎉 Выходной! Нет занятий',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13.5,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ...day.items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  return AnimatedContainer(
+                    duration: Duration(milliseconds: 160 + (index * 40)),
+                    curve: Curves.easeInOut,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: _buildScheduleItem(context, item),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Компактная карточка пары
+  Widget _buildScheduleItem(BuildContext context, ScheduleItem item) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _getLessonColor(item.type).withOpacity(0.28),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // номер пары
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: _getLessonColor(item.type),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '${item.lessonNumber}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.subject,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                if (item.teacher.isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(Icons.person,
+                          size: 12,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.teacher,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (item.classroom.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.room,
+                          size: 12,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        item.classroom,
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(_getLessonIcon(item.type),
+                        size: 12,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      _getLessonType(item.type),
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getLessonColor(String type) {
+    switch (type) {
+      case 'лекц':
+        return Colors.blue;
+      case 'пр':
+        return Colors.green;
+      case 'лб':
+        return Colors.orange;
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  IconData _getLessonIcon(String type) {
+    switch (type) {
+      case 'лекц':
+        return Icons.school;
+      case 'пр':
+        return Icons.assignment;
+      case 'лб':
+        return Icons.science;
+      default:
+        return Icons.emoji_people;
+    }
+  }
+
+  String _getLessonType(String type) {
+    switch (type) {
+      case 'лекц':
+        return 'Лекция';
+      case 'пр':
+        return 'Практика';
+      case 'лб':
+        return 'Лабораторная';
+      default:
+        return type;
+    }
+  }
+
+  // ------------------- СЕЛЕКТОР ГРУППЫ -------------------
   Widget _buildGroupSelector(BuildContext context) {
     if (_isStudent) {
       return Card(
@@ -525,11 +825,15 @@ class _ScheduleScreenState extends State<ScheduleScreen>
             )
                 : Row(
               children: [
-                Icon(Icons.school, color: Theme.of(context).colorScheme.primary, size: 20),
+                Icon(Icons.school,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _selectedGroup != null ? 'Ваша группа: $_selectedGroup' : 'Группа не определена',
+                    _selectedGroup != null
+                        ? 'Ваша группа: $_selectedGroup'
+                        : 'Группа не определена',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -590,7 +894,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                         onTap: _onDropdownTap,
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
                           decoration: BoxDecoration(
                             color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(12),
@@ -604,15 +909,21 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.group, color: Theme.of(context).colorScheme.primary, size: 20),
+                              Icon(Icons.group,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 20),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   _selectedGroup ?? 'Выберите группу',
                                   style: TextStyle(
                                     color: _selectedGroup != null
-                                        ? Theme.of(context).colorScheme.onBackground
-                                        : Theme.of(context).colorScheme.onSurface,
+                                        ? Theme.of(context)
+                                        .colorScheme
+                                        .onBackground
+                                        : Theme.of(context)
+                                        .colorScheme
+                                        .onSurface,
                                     fontWeight: FontWeight.w500,
                                     fontSize: 14,
                                   ),
@@ -627,7 +938,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                                 ),
                                 child: Icon(
                                   Icons.arrow_drop_down,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color:
+                                  Theme.of(context).colorScheme.primary,
                                   size: 24,
                                 ),
                               ),
@@ -658,22 +970,23 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                                   ),
                                 ],
                               ),
-                              constraints: const BoxConstraints(maxHeight: 200),
+                              constraints:
+                              const BoxConstraints(maxHeight: 200),
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: _groups.map((group) {
                                     return Material(
                                       color: Colors.transparent,
                                       child: InkWell(
-                                        onTap: () {
-                                          _onSelectGroup(group);
-                                        },
+                                        onTap: () => _onSelectGroup(group),
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 20, vertical: 16),
                                           decoration: BoxDecoration(
                                             border: Border(
                                               bottom: BorderSide(
-                                                color: Theme.of(context).dividerColor,
+                                                color: Theme.of(context)
+                                                    .dividerColor,
                                                 width: 1,
                                               ),
                                             ),
@@ -683,8 +996,12 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                                               Icon(
                                                 Icons.school,
                                                 color: _selectedGroup == group
-                                                    ? Theme.of(context).colorScheme.primary
-                                                    : Theme.of(context).colorScheme.onSurface,
+                                                    ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    : Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface,
                                                 size: 18,
                                               ),
                                               const SizedBox(width: 12),
@@ -692,10 +1009,16 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                                                 child: Text(
                                                   group,
                                                   style: TextStyle(
-                                                    color: _selectedGroup == group
-                                                        ? Theme.of(context).colorScheme.primary
-                                                        : Theme.of(context).colorScheme.onBackground,
-                                                    fontWeight: _selectedGroup == group
+                                                    color:
+                                                    _selectedGroup == group
+                                                        ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        : Theme.of(context)
+                                                        .colorScheme
+                                                        .onBackground,
+                                                    fontWeight:
+                                                    _selectedGroup == group
                                                         ? FontWeight.w600
                                                         : FontWeight.w500,
                                                     fontSize: 14,
@@ -705,7 +1028,9 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                                               if (_selectedGroup == group)
                                                 Icon(
                                                   Icons.check,
-                                                  color: Theme.of(context).colorScheme.primary,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
                                                   size: 18,
                                                 ),
                                             ],
@@ -728,196 +1053,5 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         ),
       ),
     );
-  }
-
-  Widget _buildDaySchedule(BuildContext context, ScheduleDay day) {
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).cardColor,
-              Theme.of(context).colorScheme.surface.withOpacity(0.8),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      day.dayName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${day.items.length} пар',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (day.items.isEmpty)
-                Center(
-                  child: Text(
-                    '🎉 Выходной! Нет занятий',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 15,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                )
-              else
-                ...day.items.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  return AnimatedContainer(
-                    duration: Duration(milliseconds: 200 + (index * 50)),
-                    curve: Curves.easeInOut,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: _buildScheduleItem(context, item),
-                  );
-                }),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScheduleItem(BuildContext context, ScheduleItem item) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
-        border: Border.all(
-          color: _getLessonColor(item.type).withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(color: _getLessonColor(item.type), shape: BoxShape.circle),
-            child: Center(
-              child: Text(
-                '${item.lessonNumber}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                item.subject,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: Theme.of(context).colorScheme.onBackground,
-                ),
-              ),
-              const SizedBox(height: 4),
-              if (item.teacher.isNotEmpty)
-                Row(children: [
-                  Icon(Icons.person, size: 13, color: Theme.of(context).colorScheme.onSurface),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      item.teacher,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12.5),
-                    ),
-                  ),
-                ]),
-              if (item.classroom.isNotEmpty)
-                Row(children: [
-                  Icon(Icons.room, size: 13, color: Theme.of(context).colorScheme.onSurface),
-                  const SizedBox(width: 4),
-                  Text(item.classroom,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12.5)),
-                ]),
-              Row(children: [
-                Icon(_getLessonIcon(item.type), size: 13, color: Theme.of(context).colorScheme.onSurface),
-                const SizedBox(width: 4),
-                Text(_getLessonType(item.type),
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500)),
-              ]),
-            ]),
-          ),
-        ]),
-      ]),
-    );
-  }
-
-  Color _getLessonColor(String type) {
-    switch (type) {
-      case 'лекц':
-        return Colors.blue;
-      case 'пр':
-        return Colors.green;
-      case 'лб':
-        return Colors.orange;
-      default:
-        return AppColors.primary;
-    }
-  }
-
-  IconData _getLessonIcon(String type) {
-    switch (type) {
-      case 'лекц':
-        return Icons.school;
-      case 'пр':
-        return Icons.assignment;
-      case 'лб':
-        return Icons.science;
-      default:
-        return Icons.emoji_people;
-    }
-  }
-
-  String _getLessonType(String type) {
-    switch (type) {
-      case 'лекц':
-        return 'Лекция';
-      case 'пр':
-        return 'Практика';
-      case 'лб':
-        return 'Лабораторная';
-      default:
-        return type;
-    }
   }
 }

@@ -1,10 +1,18 @@
+// lib/teacher/teacher_schedule_screen.dart
+import 'dart:async'; // TimeoutException
+import 'dart:io';    // SocketException
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants.dart';
 import '../widgets/custom_app_bar.dart';
+import 'package:decanat_progect/ui/overlay_toast.dart';
+
+// экран отметки присутствующих
+import 'package:decanat_progect/screens/attendance_mark_screen.dart';
 
 /// ---------- МОДЕЛИ ----------
 class TeacherScheduleWeek {
@@ -48,10 +56,10 @@ class TeacherScheduleItem {
   factory TeacherScheduleItem.fromJson(Map<String, dynamic> json) =>
       TeacherScheduleItem(
         lessonNumber: json['lesson_number'],
-        subject: json['subject'],
-        groupName: json['group_name'],
-        classroom: json['classroom'],
-        type: json['type'],
+        subject: json['subject'] ?? '',
+        groupName: json['group_name'] ?? '',
+        classroom: json['classroom'] ?? '',
+        type: json['type'] ?? '',
         weekType: json['week_type'] ?? '',
       );
 }
@@ -69,9 +77,9 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   // неделя
   String _selectedWeek = 'upper';
 
-  // фиксированный преподаватель (для роли teacher)
+  // преподаватель
   String? _teacherFullName; // определяем по userId
-  String? _selectedTeacher; // фолбэк/используется для не-teacher ролей
+  String? _selectedTeacher; // фолбэк (для не-teacher ролей)
 
   // данные
   TeacherScheduleWeek? _currentSchedule;
@@ -96,7 +104,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   @override
   void initState() {
     super.initState();
-
     _animationController =
         AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     _dropdownController =
@@ -105,18 +112,14 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         CurvedAnimation(parent: _dropdownController, curve: Curves.easeInOut);
 
     _initBaseWeekIfMissing();
-    _initWeekAndUser(); // асинхронный старт
-
+    _initWeekAndUser();
     _animationController.forward();
   }
 
   Future<void> _initWeekAndUser() async {
-    // вычисляем текущую неделю
     final w = await _computeCurrentWeekType();
     if (!mounted) return;
     setState(() => _selectedWeek = w);
-
-    // грузим контекст пользователя и остальное
     await _loadUserContext();
   }
 
@@ -133,7 +136,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     final baseDate = prefs.getString('baseWeekMonday');
     final baseType = prefs.getString('baseWeekType');
     if (baseDate == null || baseType == null) {
-      // считаем текущую неделю базовой верхней (можно сменить в инструментах разработчика)
       final monday = _mondayOf(DateTime.now());
       await prefs.setString('baseWeekMonday', monday.toIso8601String().split('T').first);
       await prefs.setString('baseWeekType', 'upper');
@@ -152,9 +154,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   }
 
   Future<String> _weekTypeForDate(DateTime monday) async {
-    // читаем базу
-    // baseWeekMonday — ISO (yyyy-MM-dd) понедельника
-    // baseWeekType   — 'upper' | 'lower'
     final prefs = await SharedPreferences.getInstance();
     final baseMondayStr = prefs.getString('baseWeekMonday');
     final baseType = prefs.getString('baseWeekType') ?? 'upper';
@@ -173,9 +172,8 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     );
 
     final diffDays = monday.difference(baseMonday).inDays;
-    final diffWeeks = diffDays ~/ 7; // целые недели
+    final diffWeeks = diffDays ~/ 7;
     final isEven = diffWeeks % 2 == 0;
-    // если чётное количество недель от базы — база; иначе — противоположная
     return isEven ? baseType : (baseType == 'upper' ? 'lower' : 'upper');
   }
 
@@ -186,10 +184,8 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     _userId = prefs.getString('userId');
 
     if (_isTeacher) {
-      // для преподавателя: узнаём ФИО и сразу тянем расписание
       await _loadTeacherProfileAndSchedule();
     } else {
-      // для остальных: старое поведение (список преподов)
       _loadSavedTeacher();
       _loadTeachers();
     }
@@ -199,20 +195,26 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   Future<void> _loadTeacherProfileAndSchedule() async {
     _isLoadingTeacherProfile = true;
     setState(() {});
-
     String? fullName;
     try {
       if (_userId != null && _userId!.isNotEmpty) {
         final url = Uri.parse('${AppConfig.serverUrl}/api/teachers/$_userId');
-        final resp = await http.get(url).timeout(const Duration(seconds: 6));
+        final resp = await http.get(url).timeout(const Duration(seconds: 8));
         if (resp.statusCode == 200) {
           final data = json.decode(resp.body) as Map<String, dynamic>;
           fullName = (data['full_name'] as String?)?.trim();
+        } else {
+          OverlayToast.instance.error('Не удалось загрузить профиль преподавателя');
         }
       }
-    } catch (_) {}
+    } on TimeoutException {
+      OverlayToast.instance.error('Сервер недоступен: таймаут', icon: Icons.cloud_off_rounded);
+    } on SocketException {
+      OverlayToast.instance.error('Нет подключения к интернету', icon: Icons.wifi_off_rounded);
+    } catch (_) {
+      OverlayToast.instance.error('Ошибка при загрузке профиля преподавателя');
+    }
 
-    // фолбэк — вдруг раньше выбирали вручную
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString('selectedTeacher');
 
@@ -221,8 +223,13 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         : (cached != null && cached.isNotEmpty ? cached : null);
 
     if (_teacherFullName != null) {
-      _selectedTeacher = _teacherFullName; // унифицируем поле
+      _selectedTeacher = _teacherFullName;
       await _loadSchedule();
+      // сохранить в prefs, чтобы другие экраны (журнал) знали ФИО
+      await prefs.setString('teacherFullName', _teacherFullName!);
+      await prefs.setString('selectedTeacher', _teacherFullName!);
+    } else {
+      OverlayToast.instance.warning('Не удалось определить преподавателя');
     }
 
     _isLoadingTeacherProfile = false;
@@ -241,6 +248,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   Future<void> _saveSelectedTeacher(String teacher) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selectedTeacher', teacher);
+    await prefs.setString('teacherFullName', teacher);
   }
 
   /// ---------- СПИСОК ПРЕПОДОВ (для не-teacher) ----------
@@ -250,20 +258,31 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
       return;
     }
     try {
-      final r =
-      await http.get(Uri.parse('${AppConfig.serverUrl}/api/teachers'));
+      final r = await http
+          .get(Uri.parse('${AppConfig.serverUrl}/api/teachers'))
+          .timeout(const Duration(seconds: 10));
+
       if (r.statusCode == 200) {
         final list = json.decode(r.body) as List<dynamic>;
         _teachers = list
-            .map((t) => (t as Map<String, dynamic>)['full_name'] as String)
+            .map((t) => (t as Map<String, dynamic>)['full_name']?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
             .toList();
         await _saveTeachersToCache(_teachers);
         setState(() => _isLoadingTeachers = false);
+        OverlayToast.instance.success('Список преподавателей обновлён');
       } else {
         await _loadTeachersFromCache();
       }
+    } on TimeoutException {
+      await _loadTeachersFromCache();
+      OverlayToast.instance.error('Сервер недоступен: таймаут', icon: Icons.cloud_off_rounded);
+    } on SocketException {
+      await _loadTeachersFromCache();
+      OverlayToast.instance.error('Нет подключения к интернету', icon: Icons.wifi_off_rounded);
     } catch (_) {
       await _loadTeachersFromCache();
+      OverlayToast.instance.error('Ошибка при загрузке списка преподавателей');
     }
   }
 
@@ -275,6 +294,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         _teachers = cached;
         _isLoadingTeachers = false;
       });
+      OverlayToast.instance.warning('Показан список преподавателей из кеша');
     } else {
       setState(() {
         _teachers = const [
@@ -289,6 +309,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         ];
         _isLoadingTeachers = false;
       });
+      OverlayToast.instance.warning('Сервер недоступен, показан базовый список');
     }
   }
 
@@ -310,7 +331,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     try {
       final url = Uri.parse(
           '${AppConfig.serverUrl}/api/teacher-schedule/$teacher/${_selectedWeek}');
-      final r = await http.get(url);
+      final r = await http.get(url).timeout(const Duration(seconds: 12));
 
       if (r.statusCode == 200) {
         final data = json.decode(r.body) as Map<String, dynamic>;
@@ -325,11 +346,20 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
           _isLoadingSchedule = false;
           _isOfflineData = false;
         });
+
+        OverlayToast.instance.success('Расписание обновлено');
       } else {
         await _loadCachedSchedule();
       }
+    } on TimeoutException {
+      await _loadCachedSchedule();
+      OverlayToast.instance.error('Сервер недоступен: таймаут', icon: Icons.cloud_off_rounded);
+    } on SocketException {
+      await _loadCachedSchedule();
+      OverlayToast.instance.error('Нет подключения к интернету', icon: Icons.wifi_off_rounded);
     } catch (_) {
       await _loadCachedSchedule();
+      OverlayToast.instance.error('Ошибка при загрузке расписания');
     }
   }
 
@@ -345,22 +375,23 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         _isLoadingSchedule = false;
         _isOfflineData = true;
       });
+      OverlayToast.instance.warning('Показано оффлайн-расписание');
     } else {
       setState(() {
         _currentSchedule = null;
         _isLoadingSchedule = false;
       });
+      OverlayToast.instance.error('Расписание не найдено');
     }
   }
 
   TeacherScheduleWeek _parseScheduleFromJson(Map<String, dynamic> jsonData) {
     final days = <TeacherScheduleDay>[];
-    const order = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
+    const order = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
     for (final day in order) {
       if (jsonData.containsKey(day)) {
         final lessons = jsonData[day] as List<dynamic>;
-        final items =
-        lessons.map((l) => TeacherScheduleItem.fromJson(l)).toList();
+        final items = lessons.map((l) => TeacherScheduleItem.fromJson(l)).toList();
         days.add(TeacherScheduleDay(dayName: day, items: items));
       } else {
         days.add(TeacherScheduleDay(dayName: day, items: const []));
@@ -381,10 +412,10 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     }
   }
 
-  void _onSelectTeacher(String teacher) {
+  void _onSelectTeacher(String teacher) async {
     setState(() => _selectedTeacher = teacher);
-    _saveSelectedTeacher(teacher);
-    _loadSchedule();
+    await _saveSelectedTeacher(teacher);
+    await _loadSchedule();
     _dropdownController.reverse();
     _animationController
       ..reset()
@@ -392,7 +423,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   }
 
   Future<void> _refresh() async {
-    // всегда пересчитаем актуальную неделю (вдруг поменяли базу)
     final w = await _computeCurrentWeekType();
     if (mounted) setState(() => _selectedWeek = w);
 
@@ -426,7 +456,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
               children: [
                 _buildWeekSelector(context),
                 const SizedBox(height: 16),
-                _buildTeacherSelector(context), // сам решит, что показать
+                _buildTeacherSelector(context),
                 const SizedBox(height: 16),
 
                 if (_isLoadingSchedule)
@@ -463,7 +493,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     );
   }
 
-  /// компактный селектор недели (как у студента)
   Widget _buildWeekSelector(BuildContext context) {
     final isLower = _selectedWeek == 'lower';
     final bg = Theme.of(context).colorScheme.surface;
@@ -564,7 +593,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   }
 
   Widget _buildTeacherSelector(BuildContext context) {
-    // 🔒 для роли teacher — селектор скрываем, показываем фиксированную плашку
     if (_isTeacher) {
       return Container(
         decoration: BoxDecoration(
@@ -576,8 +604,8 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         child: _isLoadingTeacherProfile
             ? Center(
           child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary),
+            valueColor:
+            AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
           ),
         )
             : Row(
@@ -621,8 +649,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(12),
-                border:
-                Border.all(color: Theme.of(context).dividerColor.withOpacity(.5)),
+                border: Border.all(color: Theme.of(context).dividerColor.withOpacity(.5)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
@@ -673,8 +700,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                       return InkWell(
                         onTap: () => _onSelectTeacher(t),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(
                             children: [
                               Icon(
@@ -788,23 +814,25 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
   }
 
   Widget _buildItem(BuildContext context, TeacherScheduleItem it) {
+    final color = _lessonColor(it.type);
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _lessonColor(it.type).withOpacity(.35), width: 1),
+        border: Border.all(color: color.withOpacity(.35), width: 1),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3))
+            color: Colors.black.withOpacity(.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
         ],
       ),
       padding: const EdgeInsets.all(12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _numberCircle(it.lessonNumber, _lessonColor(it.type)),
+          _numberCircle(it.lessonNumber, color),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -825,6 +853,34 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          // Кнопка "отметить присутствующих"
+          Tooltip(
+            message: 'Отметить присутствующих',
+            child: IconButton(
+              icon: const Icon(Icons.checklist_rtl),
+              onPressed: () async {
+                // Подтягиваем пользовательские настройки
+                final prefs = await SharedPreferences.getInstance();
+                final emoji = prefs.getString('header_decor_emoji') ?? '🚧';
+                final vibrate = prefs.getBool('vibration_enabled') ?? true;
+
+                if (vibrate) {
+                  HapticFeedback.mediumImpact();
+                }
+
+                final msg = '$emoji  Журнал посещаемости в разработке';
+
+                // Показываем тост с текущим пользовательским стилем
+                OverlayToast.instance.warning(
+                  msg,
+                  icon: Icons.construction_rounded,
+                  position: ToastPosition.top,
+                );
+              },
+            ),
+          ),
+
         ],
       ),
     );
@@ -839,7 +895,10 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
         child: Text(
           '$n',
           style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
         ),
       ),
     );

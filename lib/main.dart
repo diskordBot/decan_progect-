@@ -5,10 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -20,17 +18,17 @@ import 'screens/settings_screen.dart';
 import 'screens/faculty_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'teacher/teacher_schedule_screen.dart';
-
 import 'constants.dart';
 import 'theme_controller.dart';
 import 'notifications/notification_service.dart';
+
+// ⬇️ добавили
+import 'ui/overlay_toast.dart';
 
 // Глобальный ключ навигации, чтобы уметь навигировать из FCM-хэндлеров
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // ========================= PresenceService =========================
-// Глобальный сервис "присутствия": шлёт /api/presence/ping при старте и каждые 60 сек,
-// а также перезапускается при возврате приложения из бэкграунда.
 class PresenceService {
   PresenceService._();
   static final PresenceService instance = PresenceService._();
@@ -48,14 +46,11 @@ class PresenceService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'user_id': userId}),
       );
-    } catch (_) {
-      // молча игнорируем сетевые ошибки
-    }
+    } catch (_) {}
   }
 
   void start() {
     stop();
-    // мгновенный пинг + периодический раз в 60 сек
     pingOnce();
     _timer = Timer.periodic(const Duration(seconds: 60), (_) => pingOnce());
   }
@@ -67,8 +62,6 @@ class PresenceService {
 }
 
 // ====================== AppLifecycleWatcher =======================
-// Обёртка вокруг приложения, чтобы реагировать на жизненный цикл (foreground/background)
-// и автоматически запускать/останавливать PresenceService.
 class AppLifecycleWatcher extends StatefulWidget {
   final Widget child;
   const AppLifecycleWatcher({super.key, required this.child});
@@ -83,7 +76,6 @@ class _AppLifecycleWatcherState extends State<AppLifecycleWatcher>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // запуск пинга при старте приложения
     PresenceService.instance.start();
   }
 
@@ -96,12 +88,10 @@ class _AppLifecycleWatcherState extends State<AppLifecycleWatcher>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // вернулись в приложение — перезапускаем пинг и шлём разовый
     if (state == AppLifecycleState.resumed) {
       PresenceService.instance.start();
       PresenceService.instance.pingOnce();
     }
-    // сворачиваем/уходим — останавливаем таймер (last_seen ещё свежий ~2 мин на сервере)
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
@@ -145,6 +135,10 @@ Future<void> _initFcmListeners() async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ⬇️ инициализация красивых верхних уведомлений (до runApp)
+  await OverlayToast.instance.init(navigatorKey: navigatorKey);
+
   await Firebase.initializeApp();
   await ThemeController.instance.load();
   await NotificationService.instance.init();
@@ -169,11 +163,11 @@ class MyApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: ThemeController.instance,
       builder: (context, _) {
-        return AppLifecycleWatcher( // 👈 оборачиваем всё приложение
+        return AppLifecycleWatcher(
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'Кафедра ПМИИ',
-            navigatorKey: navigatorKey,
+            navigatorKey: navigatorKey, // ⬅️ важно для OverlayToast
             themeMode: ThemeController.instance.themeMode,
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),

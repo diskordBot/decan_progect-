@@ -5,6 +5,9 @@ import 'dart:convert';
 import 'package:decanat_progect/constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// 👇 единый сервис всплывающих уведомлений
+import 'package:decanat_progect/ui/overlay_toast.dart';
+
 // ------------------------ ENUM ДОЛЖЕН БЫТЬ ВНЕ КЛАССА ------------------------
 enum _SaveAction { save, discard, cancel }
 
@@ -36,7 +39,7 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
     'Среда',
     'Четверг',
     'Пятница',
-  ]; // Суббота/Воскресенье — выходные (не показываем)
+  ];
 
   final List<String> lessonTypes = const ['лекц', 'пр', 'лб'];
 
@@ -68,6 +71,13 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
     _disposeAndClearAllControllers();
     newGroupController.dispose();
     super.dispose();
+  }
+
+  // --------- короткий helper для тостов ----------
+  void _toast(String msg,
+      {IconData icon = Icons.info_outline_rounded, Color? accent}) {
+    OverlayToast.instance
+        .show(msg, icon: icon, accent: accent ?? AppColors.accent);
   }
 
   Future<void> _loadUserRole() async {
@@ -162,7 +172,6 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   }
 
   void _loadLocalGroupsFallback() {
-    // Генерация в точности как на сервере:
     const bachelor = ['ПМК', 'ИВТ', 'ИНФ', 'ПИ', 'САУ'];
     const master = ['ПМКм', 'ИВТм', 'ИНФм', 'ПИм', 'САУм'];
     const yearSuffix = {2025: '25', 2024: '24', 2023: '23', 2022: '22'};
@@ -231,12 +240,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
           _isDirty = false; // только просмотр после загрузки
         });
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Расписание загружено'),
-            backgroundColor: Colors.green,
-          ));
-        }
+        _toast('Расписание загружено',
+            icon: Icons.check_circle_rounded, accent: Colors.green);
       } else {
         setState(() {
           isEditingExisting = false;
@@ -250,16 +255,12 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         isLoadingSchedule = false;
       });
       _ensureEmptyStructure();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Ошибка загрузки: $e'),
-          backgroundColor: Colors.red,
-        ));
-      }
+      _toast('Ошибка загрузки: $e',
+          icon: Icons.error_outline_rounded, accent: Colors.red);
     }
   }
 
-  // ====== ДОБАВЛЕНИЕ ГРУППЫ =================================================
+  // ====== ДОБАВЛЕНИЕ ГРУППЫ (ОДНОЙ) =========================================
   Future<void> _addNewGroup() async {
     final name = newGroupController.text.trim();
     if (name.isEmpty) return;
@@ -282,11 +283,9 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       _disposeAndClearAllControllers();
       _ensureEmptyStructure();
 
-      if (response.statusCode == 200 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Группа добавлена'),
-          backgroundColor: Colors.green,
-        ));
+      if (response.statusCode == 200) {
+        _toast('Группа добавлена',
+            icon: Icons.check_rounded, accent: Colors.green);
       }
     } catch (_) {
       setState(() {
@@ -298,24 +297,28 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       });
       _disposeAndClearAllControllers();
       _ensureEmptyStructure();
+      _toast('Группа добавлена локально',
+          icon: Icons.offline_bolt_rounded);
     }
   }
 
   // ====== СОХРАНЕНИЕ ОБЕИХ НЕДЕЛЬ ==========================================
   Future<void> _saveSchedule() async {
     if (selectedGroup == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Выберите группу'),
-        backgroundColor: Colors.red,
-      ));
+      _toast('Выберите группу',
+          icon: Icons.warning_amber_rounded, accent: Colors.red);
       return;
     }
 
-    // 1) Удаляем пустые предметы + пере-нумеровываем 1..N
+    const String kEmptyPlaceholder = '—';
     for (final map in [upperWeekSchedule, lowerWeekSchedule]) {
       map.forEach((_, items) {
-        items.removeWhere((it) => it.subject.trim().isEmpty);
         for (int i = 0; i < items.length; i++) {
+          final it = items[i];
+          final isEmptySubject = it.subject.trim().isEmpty;
+          if (isEmptySubject) {
+            items[i] = it.copyWith(subject: kEmptyPlaceholder);
+          }
           items[i] = items[i].copyWith(lessonNumber: i + 1);
         }
       });
@@ -334,27 +337,23 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         body: json.encode(scheduleData),
       );
 
-      if (response.statusCode == 200 && mounted) {
+      if (response.statusCode == 200) {
         setState(() => isEditingExisting = true);
         _isDirty = false;
 
-        // 2) Сразу подтянуть, что реально сохранилось
         await _loadExistingSchedule();
 
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Обе недели сохранены'),
-          backgroundColor: Colors.green,
-        ));
+        _toast(
+          'Обе недели сохранены',
+          icon: Icons.save_rounded,
+          accent: Colors.green,
+        );
       } else {
         throw Exception('Код ответа: ${response.statusCode}');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Ошибка сохранения: $e'),
-          backgroundColor: Colors.red,
-        ));
-      }
+      _toast('Ошибка сохранения: $e',
+          icon: Icons.error_outline_rounded, accent: Colors.red);
     }
   }
 
@@ -363,8 +362,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       ) {
     final result = <String, dynamic>{};
     schedule.forEach((day, items) {
-      // на всякий случай сортируем по номеру пары
-      final sorted = [...items]..sort((a, b) => a.lessonNumber.compareTo(b.lessonNumber));
+      final sorted = [...items]
+        ..sort((a, b) => a.lessonNumber.compareTo(b.lessonNumber));
       result[day] = sorted.map((it) => it.toJson()).toList();
     });
     return result;
@@ -384,6 +383,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       if (!_isDirty) setState(applyChange);
     } else if (action == _SaveAction.discard) {
       setState(applyChange);
+      _toast('Изменения не сохранены',
+          icon: Icons.history_toggle_off_rounded);
     }
   }
 
@@ -419,10 +420,11 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       for (int i = 0; i < schedule[day]!.length; i++) {
         schedule[day]![i] = schedule[day]![i].copyWith(lessonNumber: i + 1);
       }
-      // удаляем контроллеры конкретного дня/недели, чтобы не было «залипших» ключей
       _dropControllersForDayWeek(day, selectedWeek);
       _isDirty = true;
     });
+    _toast('Пара удалена',
+        icon: Icons.delete_outline_rounded, accent: Colors.red);
   }
 
   void _updateLesson(String day, int index, ScheduleItem updatedItem) {
@@ -445,6 +447,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       _isDirty = true;
       _disposeAndClearAllControllers();
     });
+    _toast('Новое расписание: пустой шаблон',
+        icon: Icons.note_add_outlined);
   }
 
   void _copyUpperToLowerWeek() {
@@ -455,14 +459,11 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         lowerWeekSchedule[d] =
             src.map((x) => x.copyWith(weekType: 'lower')).toList();
       }
-      // контроллеры нижней недели становятся неактуальны
       _dropControllersForWeek('lower');
       _isDirty = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Скопировано: Верхняя → Нижняя'),
-      backgroundColor: Colors.green,
-    ));
+    _toast('Скопировано: Верхняя → Нижняя',
+        icon: Icons.copy_all_rounded);
   }
 
   void _copyLowerToUpperWeek() {
@@ -476,10 +477,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       _dropControllersForWeek('upper');
       _isDirty = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Скопировано: Нижняя → Верхняя'),
-      backgroundColor: Colors.green,
-    ));
+    _toast('Скопировано: Нижняя → Верхняя',
+        icon: Icons.copy_all_rounded);
   }
 
   // ====== GUARD НА ВОЗВРАТ ==================================================
@@ -492,6 +491,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
       await _saveSchedule();
       return !_isDirty;
     } else if (action == _SaveAction.discard) {
+      _toast('Изменения не сохранены',
+          icon: Icons.history_toggle_off_rounded);
       return true;
     }
     return false;
@@ -558,6 +559,11 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
           iconTheme:
           IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
           actions: [
+            IconButton(
+              tooltip: 'Доп. действия',
+              icon: const Icon(Icons.tune_rounded),
+              onPressed: _openAdvancedActionsSheet,
+            ),
             IconButton(
               tooltip: 'Сохранить обе недели',
               icon: const Icon(Icons.save_rounded),
@@ -720,7 +726,8 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border.all(
                   color: Theme.of(context).dividerColor,
@@ -813,14 +820,17 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
                             : Theme.of(context)
                             .colorScheme
                             .onBackground,
-                        fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: selected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
                     ),
                     trailing: selected
                         ? Icon(Icons.check,
                         size: 20,
-                        color: Theme.of(context).colorScheme.primary)
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary)
                         : null,
                     onTap: () {
                       _guardedChange(() {
@@ -1019,8 +1029,6 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
   Widget _buildLessonEditor(String day, int index, ScheduleItem lesson) {
     final key = _ctrlKey(day, index, selectedWeek);
 
-    // Листенеры теперь всегда читают АКТУАЛЬНЫЙ элемент из state,
-    // чтобы правки не терялись.
     subjectControllers.putIfAbsent(key, () {
       final c = TextEditingController(text: lesson.subject);
       c.addListener(() {
@@ -1169,6 +1177,286 @@ class _AdminScheduleEditorState extends State<AdminScheduleEditor> {
         return t;
     }
   }
+
+  // ======================= РАСШИРЕННЫЕ ДЕЙСТВИЯ (ГРУППЫ) ====================
+
+  // Нормализуем год: "22" или "2022" → "22"
+  String _normalizeYearSuffix(String input) {
+    final s = input.trim();
+    if (s.isEmpty) return '';
+    final onlyDigits = s.replaceAll(RegExp(r'\D+'), '');
+    if (onlyDigits.length == 2) return onlyDigits;
+    if (onlyDigits.length == 4) return onlyDigits.substring(2);
+    return '';
+  }
+
+  // Кнопка в AppBar → bottom sheet
+  void _openAdvancedActionsSheet() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_forever_rounded),
+                title: const Text('Удалить устаревшие группы (по году)'),
+                subtitle: const Text('Двухэтапное подтверждение'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _askDeleteByYearFlow();
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.group_add_rounded),
+                title: const Text('Добавить набор новых групп (пачкой)'),
+                subtitle: const Text('Сгенерировать все префиксы за год'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _bulkAddCohortFlow();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Диалог ввода года (строка)
+  Future<String?> _askYearDialog({
+    required String title,
+    required String hint,
+  }) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Год',
+            hintText: 'Например: 22 или 2022',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('Продолжить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Удаление по году: 2 подтверждения → сервер
+  Future<void> _askDeleteByYearFlow() async {
+    final raw = await _askYearDialog(
+      title: 'Удаление групп по году',
+      hint: 'Введите год (22 или 2022)',
+    );
+    if (raw == null) return;
+    final suf = _normalizeYearSuffix(raw);
+    if (suf.isEmpty) {
+      _toast('Некорректный год', icon: Icons.error_outline_rounded, accent: Colors.red);
+      return;
+    }
+
+    final toDelete = groups.where((g) => g.endsWith('-$suf')).toList();
+    if (toDelete.isEmpty) {
+      _toast('Групп с суффиксом $suf не найдено');
+      return;
+    }
+
+    // Подтверждение #1
+    final ok1 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Вы уверены?'),
+        content: Text('Удалить данные этих групп по году $suf? Найдено: ${toDelete.length}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Да')),
+        ],
+      ),
+    );
+    if (ok1 != true) return;
+
+    // Подтверждение #2 (детальный список + предупреждение)
+    final ok2 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Подтверждение удаления'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Будут удалены ${toDelete.length} групп(ы):'),
+                const SizedBox(height: 8),
+                Text(toDelete.join(', ')),
+                const SizedBox(height: 12),
+                const Text(
+                  'ВНИМАНИЕ: Это действие нельзя отменить.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить безвозвратно'),
+          ),
+        ],
+      ),
+    );
+    if (ok2 != true) return;
+
+    await _deleteGroupsOnServerBySuffix(suf, toDelete);
+  }
+
+  // Серверный вызов удаления: сначала /by-yearcode, если нет — явный список
+  Future<void> _deleteGroupsOnServerBySuffix(String suffix, List<String> toDelete) async {
+    try {
+      // 1) Пытаемся удалить по коду года
+      http.Response? resp;
+      try {
+        resp = await http.post(
+          Uri.parse('${AppConfig.serverUrl}/api/groups/delete/by-yearcode'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'year_code': suffix}),
+        );
+      } catch (_) {
+        // игнор — попробуем через явный список
+      }
+
+      if (resp == null || resp.statusCode == 404) {
+        // 2) Fallback — удаляем явным списком
+        resp = await http.post(
+          Uri.parse('${AppConfig.serverUrl}/api/groups/delete'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'groups': toDelete}),
+        );
+      }
+
+      if (resp.statusCode == 200) {
+        setState(() {
+          groups.removeWhere((g) => g.endsWith('-$suffix'));
+          if (selectedGroup != null && selectedGroup!.endsWith('-$suffix')) {
+            selectedGroup = null;
+            upperWeekSchedule.clear();
+            lowerWeekSchedule.clear();
+            _disposeAndClearAllControllers();
+          }
+        });
+        _toast('Удалено групп: ${toDelete.length}',
+            icon: Icons.delete_forever_rounded, accent: Colors.red);
+      } else {
+        throw Exception('Код ответа: ${resp.statusCode}');
+      }
+    } catch (e) {
+      _toast('Ошибка удаления: $e',
+          icon: Icons.error_outline_rounded, accent: Colors.red);
+    }
+  }
+
+  // Добавление «кохорты» (набор бакалавр+магистр)
+  Future<void> _bulkAddCohortFlow() async {
+    final raw = await _askYearDialog(
+      title: 'Добавление набора групп',
+      hint: 'Введите год (26 или 2026)',
+    );
+    if (raw == null) return;
+    final suf = _normalizeYearSuffix(raw);
+    if (suf.isEmpty) {
+      _toast('Некорректный год',
+          icon: Icons.error_outline_rounded, accent: Colors.red);
+      return;
+    }
+
+    // Предпросмотр набора: бакалавр + магистр
+    const bachelor = ['ПМК', 'ИВТ', 'ИНФ', 'ПИ', 'САУ'];
+    const master = ['ПМКм', 'ИВТм', 'ИНФм', 'ПИм', 'САУм'];
+    final preview = [
+      ...bachelor.map((p) => '$p-$suf'),
+      ...master.map((p) => '$p-$suf'),
+    ];
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Создать группы за 20$suf?'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(child: Text(preview.join(', '))),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await _createCohortOnServer(suf);
+  }
+
+  // Серверный вызов создания когорты
+  Future<void> _createCohortOnServer(String suffix) async {
+    try {
+      final yy = int.parse(suffix);
+      final yearFull = 2000 + yy;
+
+      final resp = await http.post(
+        Uri.parse('${AppConfig.serverUrl}/api/groups/generate'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'year': yearFull}),
+      );
+
+      if (resp.statusCode == 200) {
+        // Рекомендуется: сервер возвращает полный список групп
+        final List<dynamic> data = json.decode(resp.body);
+        setState(() {
+          groups = data.map((e) => e.toString()).toList();
+        });
+        _toast('Группы за $yearFull добавлены',
+            icon: Icons.check_circle_rounded, accent: Colors.green);
+      } else {
+        throw Exception('Код ответа: ${resp.statusCode}');
+      }
+    } catch (e) {
+      // Фолбэк — локально сгенерим и добавим недостающие, чтобы не блокировать UX.
+      const bachelor = ['ПМК', 'ИВТ', 'ИНФ', 'ПИ', 'САУ'];
+      const master = ['ПМКм', 'ИВТм', 'ИНФм', 'ПИм', 'САУм'];
+      final local = [
+        ...bachelor.map((p) => '$p-$suffix'),
+        ...master.map((p) => '$p-$suffix'),
+      ];
+      setState(() {
+        final set = {...groups, ...local};
+        groups = set.toList()..sort();
+      });
+      _toast('Сервер недоступен — набор добавлен локально',
+          icon: Icons.offline_bolt_rounded);
+    }
+  }
 }
 
 // ====== МОДЕЛЬ ДЛЯ ЭТОГО ЭКРАНА =============================================
@@ -1212,7 +1500,7 @@ class ScheduleItem {
     'subject': subject,
     'teacher': teacher,
     'classroom': classroom,
-    'type': type, // сервер ожидает ключ 'type'
+    'type': type,
   };
 
   static ScheduleItem fromJson(Map<String, dynamic> json) {
@@ -1222,7 +1510,7 @@ class ScheduleItem {
       teacher: (json['teacher'] ?? '') as String,
       classroom: (json['classroom'] ?? '') as String,
       type: (json['type'] ?? '') as String,
-      weekType: '', // заполняем позже copyWith при загрузке
+      weekType: '',
     );
   }
 }

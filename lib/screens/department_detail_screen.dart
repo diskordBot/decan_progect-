@@ -1,14 +1,14 @@
+// lib/screens/department_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:decanat_progect/constants.dart';
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 // ✅ Единый синий AppBar
 import '../widgets/custom_app_bar.dart';
+
+// 🔔 Кастомные уведомления
+import 'package:decanat_progect/ui/overlay_toast.dart';
 
 class DepartmentDetailScreen extends StatefulWidget {
   const DepartmentDetailScreen({super.key});
@@ -28,27 +28,47 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
   final _infKey = GlobalKey(); // 09.xx.03 Прикладная информатика
   final _piKey  = GlobalKey(); // 09.xx.04 Программная инженерия
 
-  // ---------- Helpers: launch/copy ----------
-  Future<void> _launchUrl(String urlString) async {
+  // ---------- Helpers: launch/copy (с кастомными уведомлениями) ----------
+  Future<bool> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
+    try {
+      final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+      return ok;
+    } catch (_) {
+      return false;
     }
   }
 
-  Future<void> _launchMap(String address) async {
-    final Uri url = Uri.parse('https://yandex.ru/maps/?text=${Uri.encodeComponent(address)}');
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch map');
-    }
+  Future<void> _openMap(String address) async {
+    final url =
+        'https://yandex.ru/maps/?text=${Uri.encodeComponent(address)}';
+    OverlayToast.instance.info('Открываю Яндекс.Карты…', position: ToastPosition.bottom);
+    final ok = await _launchUrl(url);
+    if (!ok) OverlayToast.instance.error('Не удалось открыть Яндекс.Карты', position: ToastPosition.bottom);
   }
 
-  Future<void> _copyToClipboard(String text, BuildContext context) async {
+  Future<void> _openTel(String digits) async {
+    OverlayToast.instance.info('Открываю звонилку…', position: ToastPosition.bottom);
+    final ok = await _launchUrl('tel:$digits');
+    if (!ok) OverlayToast.instance.error('Не удалось открыть звонилку', position: ToastPosition.bottom);
+  }
+
+  Future<void> _openMail(String email) async {
+    OverlayToast.instance.info('Открываю почту…', position: ToastPosition.bottom);
+    final ok = await _launchUrl('mailto:$email');
+    if (!ok) OverlayToast.instance.error('Не удалось открыть почту', position: ToastPosition.bottom);
+  }
+
+  Future<void> _openSite(String url) async {
+    OverlayToast.instance.info('Открываю сайт…', position: ToastPosition.bottom);
+    final ok = await _launchUrl(url);
+    if (!ok) OverlayToast.instance.error('Не удалось открыть сайт', position: ToastPosition.bottom);
+  }
+
+  Future<void> _copyToClipboard(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Скопировано: $text'), duration: const Duration(seconds: 2)),
-    );
+    HapticFeedback.selectionClick();
+    OverlayToast.instance.info('Скопировано: $text', position: ToastPosition.bottom);
   }
 
   // ---------- Scroll-to-section + FLASH (через Overlay, плавный и короткий) ----------
@@ -56,18 +76,14 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
     final ctx = targetKey.currentContext;
     if (ctx == null) return;
 
-    // 1) СНАЧАЛА плавно скроллим к карточке
     await Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 650),
       curve: Curves.easeInOut,
-      alignment: 0.06, // чуть ниже верха экрана
+      alignment: 0.06,
     );
 
-    // 2) Даём интерфейсу «устаканиться»
     await Future.delayed(const Duration(milliseconds: 120));
-
-    // 3) Только теперь — подсветка поверх карточки
     await _flashOverlayFor(targetKey);
   }
 
@@ -94,79 +110,66 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
 
     final scheme = Theme.of(context).colorScheme;
 
-    // Контроллер анимации: ~620 мс общая длительность
     final controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 620),
     );
 
-    // Последовательность: плавно 0→1 (вход) -> пауза -> плавно 1→0 (выход)
-    final opacitySequence = TweenSequence<double>([
-      // Вход (≈180 мс)
+    // вход -> пауза -> выход
+    final opacityTween = TweenSequence<double>([
       TweenSequenceItem(
-        tween: CurveTween(curve: Curves.easeOutQuad),
+        tween: Tween<double>(begin: 0, end: 1).chain(CurveTween(curve: Curves.easeOutQuad)),
         weight: 180,
       ),
-      // Пауза на пике (≈180 мс) — реализуем плоской кривой
       TweenSequenceItem(
         tween: ConstantTween<double>(1.0),
         weight: 180,
       ),
-      // Выход (≈260 мс)
       TweenSequenceItem(
-        tween: CurveTween(curve: Curves.easeInQuad).chain(Tween(begin: 1.0, end: 0.0)),
+        tween: Tween<double>(begin: 1, end: 0).chain(CurveTween(curve: Curves.easeInQuad)),
         weight: 260,
       ),
-    ]).animate(controller);
+    ]);
+    final opacityAnim = opacityTween.animate(controller);
 
-    // Цвет/тень делаем мягче
-    double opacity = 0.0;
+    double opacity = 0;
     final entry = OverlayEntry(
-      builder: (_) {
-        return Positioned(
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-          child: IgnorePointer(
-            ignoring: true,
-            child: Opacity(
-              opacity: opacity,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.primary.withOpacity(0.12), // мягче, чем было
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.primary.withOpacity(0.30),
-                      blurRadius: 18,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: const SizedBox.expand(),
+      builder: (_) => Positioned(
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: opacity,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.primary.withOpacity(0.30),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
 
     overlay.insert(entry);
-    HapticFeedback.selectionClick(); // мягкая тактильная отдача (можно убрать)
+    HapticFeedback.selectionClick();
 
-    // Слушатель для покадрового обновления overlay
     void tick() {
-      opacity = opacitySequence.value;
+      opacity = opacityAnim.value;
       entry.markNeedsBuild();
     }
 
     controller.addListener(tick);
-
-    // Запускаем и ждём завершения
     await controller.forward();
-
-    // Чистим
     controller.removeListener(tick);
     controller.dispose();
     entry.remove();
@@ -174,7 +177,6 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
 
   // Удобная маршрутизация кодов → секции
   void _onProgramTap(String code) {
-    // Сопоставим обе ступени (бак/маг) к одним разделам
     if (code.startsWith('01.03') || code.startsWith('01.04')) {
       _scrollToSection(_pmkKey);
     } else if (code.startsWith('27.03') || code.startsWith('27.04')) {
@@ -235,7 +237,6 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        // фирменный синий градиент шапки
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -317,7 +318,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
               '📍',
               'Адрес',
               'ул.Артема 131, 11-й корпус, аудитории 11.516, 11.417, 11.419, 11.408, 11.409',
-              onTap: () => _launchMap('ул.Артема 131, Донецк'),
+              onTap: () => _openMap('ул.Артема 131, Донецк'),
             ),
             _buildContactItem(
               context,
@@ -326,13 +327,16 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
               '+7 (856) 301-09-51, +7 (856) 301-03-91, +7 (856) 337-72-36\n+7 (949) 0010304, +7(949) 0270303, +7(949) 0090303',
               copyText:
               '+7 (856) 301-09-51, +7 (856) 301-03-91, +7 (856) 337-72-36, +7 (949) 0010304, +7(949) 0270303, +7(949) 0090303',
+              // по тапу на телефоны — скопировать и подсказать, что можно перезвонить из контактов
+              onTap: () => _copyToClipboard(
+                  '+7 (856) 301-09-51, +7 (856) 301-03-91, +7 (856) 337-72-36, +7 (949) 0010304, +7(949) 0270303, +7(949) 0090303'),
             ),
             _buildContactItem(
               context,
               '📧',
               'E-mail',
               'pm_donntu@mail.ru',
-              onTap: () => _launchUrl('mailto:pm_donntu@mail.ru'),
+              onTap: () => _openMail('pm_donntu@mail.ru'),
               copyText: 'pm_donntu@mail.ru',
             ),
             _buildContactItem(
@@ -340,7 +344,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
               '🌐',
               'Сайт',
               'http://amai.fisp.donntu.ru/',
-              onTap: () => _launchUrl('http://amai.fisp.donntu.ru/'),
+              onTap: () => _openSite('http://amai.fisp.donntu.ru/'),
               copyText: 'http://amai.fisp.donntu.ru/',
             ),
           ],
@@ -385,7 +389,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
                     style: TextStyle(
                       color: onTap != null ? scheme.primary : scheme.onBackground,
                       fontSize: 14,
-                      decoration: TextDecoration.none, // ← без подчёркивания
+                      decoration: TextDecoration.none, // без подчёркивания
                     ),
                   ),
                 ),
@@ -396,7 +400,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
             const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.content_copy, size: 18),
-              onPressed: () => _copyToClipboard(copyText, context),
+              onPressed: () => _copyToClipboard(copyText),
               color: scheme.primary,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
@@ -469,7 +473,11 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap?.call();
+        OverlayToast.instance.info('Прокрутил к «$code»', position: ToastPosition.bottom);
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
@@ -620,7 +628,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
     );
   }
 
-  // Карточка подробностей (без внутренней анимации; подсветка идёт через Overlay)
+  // Карточка подробностей
   Widget _buildProgramDetailCard(
       BuildContext context, {
         required GlobalKey key,
@@ -630,7 +638,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen>
     final scheme = Theme.of(context).colorScheme;
 
     return Card(
-      key: key, // важный момент: key на самой карточке
+      key: key,
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       color: Theme.of(context).cardColor,

@@ -1,12 +1,13 @@
+// lib/screens/faculty_screen.dart
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
+
 import '../widgets/custom_app_bar.dart';
 import '../constants.dart';
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
-
+// 🔔 Кастомные уведомления
+import 'package:decanat_progect/ui/overlay_toast.dart';
 
 class FacultyScreen extends StatefulWidget {
   const FacultyScreen({super.key});
@@ -16,12 +17,15 @@ class FacultyScreen extends StatefulWidget {
 }
 
 class _FacultyScreenState extends State<FacultyScreen> {
+  // ====== ДАННЫЕ ============================================================
+
   final List<Department> _departments = [
     Department(
       name: 'Кафедра компьютерной инженерии',
       code: 'КИ',
       head: 'Заведующий кафедрой компьютерной инженерии',
-      description: 'Кафедра осуществляет подготовку бакалавров и магистров в области информатики и вычислительной техники. Специализация включает разработку вычислительных систем, программного обеспечения, сетевых технологий и встроенных систем.',
+      description:
+      'Кафедра осуществляет подготовку бакалавров и магистров в области информатики и вычислительной техники. Специализация включает разработку вычислительных систем, программного обеспечения, сетевых технологий и встроенных систем.',
       website: 'http://ki.fknt.donntu.ru',
       email: 'info_ki@cs.donntu.ru',
       phone: '+7 (856) 301-08-90',
@@ -35,12 +39,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
           form: 'Очная',
           profiles: [
             ProgramProfile(
-              name: 'Вычислительные машины, комплексы, системы и сети (КС)',
-              description: 'Подготовка в области вычислительных машин, комплексов, систем и сетей предусматривает получение глубоких теоретических и практических знаний в области разработки многопоточных распределенных Интернет-приложений с применением языков программирования высокого уровня (С++, C#, Java), Web-программирование (PHP, JavaScript, HTML, XML, MySQL), платформ для разработки приложений (.NET и J2EE), компьютерных проводных и беспроводных локальных сетей, администрирования сетевого оборудования, сетевых протоколов и сервисов Internet, программирования в компьютерных сетях с использованием протоколов семейства TCP/IP, разработки и администрирования баз данных, администрирования и настройки серверных операционных систем и сервисов, разработки встроенных микропроцессорных систем и приложений на основе технологий программируемой логики и HDL-языков, программной и аппаратной реализации обработки информации на программируемых логических интегральных схемах (FPGA), программирования мобильных устройств, защиты информации в компьютерных системах, компьютерной графики.',
+              name:
+              'Вычислительные машины, комплексы, системы и сети (КС)',
+              description:
+              'Подготовка в области вычислительных машин, комплексов, систем и сетей предусматривает получение глубоких теоретических и практических знаний в разработке многопоточных распределённых приложений, Web-программировании, сетях, администрировании, базах данных, ОС, встраиваемых системах, FPGA, мобильной разработке и защите информации.',
             ),
             ProgramProfile(
-              name: 'Программное обеспечение средств вычислительной техники (ПОВТ)',
-              description: 'Подготовка в области программного обеспечения средств вычислительной техники предусматривает освоение современных технологий и языков программирования (С++, C#, Java), инструментальных средств разработки программного обеспечения прикладного и системного характера, web-сайтов и Internet-приложений, технологии управления аппаратными ресурсами компьютера, средств разработки и администрирования баз данных, архитектуру и особенности реализации операционных систем различного назначения, технологий проектирования интеллектуальных систем и систем искусственного интеллекта, программного обеспечения для суперкомпьютеров, технологий параллельного программирования, распределенных вычислений и хранения данных.',
+              name:
+              'Программное обеспечение средств вычислительной техники (ПОВТ)',
+              description:
+              'Современные технологии и языки программирования (C++, C#, Java), системное и прикладное ПО, веб-сайты и web-приложения, БД, ОС, ИИ и вычисления высокого уровня, параллельные и распределённые вычисления.',
             ),
           ],
         ),
@@ -53,21 +61,27 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Магистерские программы по компьютерной инженерии',
-              description: 'Углубленная подготовка магистров в области современных компьютерных технологий, включая advanced programming, distributed systems, artificial intelligence, и cutting-edge hardware development.',
+              description:
+              'Углублённая подготовка по advanced programming, distributed systems, AI и современным аппаратным технологиям.',
             ),
           ],
         ),
       ],
     ),
     Department(
-      name: 'Кафедра прикладной математики и искусственного интеллекта',
+      name:
+      'Кафедра прикладной математики и искусственного интеллекта',
       code: 'ПМИИ',
-      head: 'Заведующий кафедрой прикладной математики и искусственного интеллекта',
-      description: 'Кафедра осуществляет подготовку бакалавров и магистров в области прикладной математики, системного анализа, прикладной информатики и программной инженерии с акцентом на искусственный интеллект и аналитические системы.',
+      head:
+      'Заведующий кафедрой прикладной математики и искусственного интеллекта',
+      description:
+      'Подготовка бакалавров и магистров в области прикладной математики, системного анализа, прикладной информатики и программной инженерии с акцентом на ИИ и аналитические системы.',
       website: 'http://amai.fisp.donntu.ru/',
       email: 'pm_donntu@mail.ru',
-      phone: '+7 (856) 301-09-51, +7 (856) 301-03-91, +7 (856) 337-72-36',
-      address: 'ДНР, г. Донецк, ул. Артема, 131, 11-й корпус, аудитории 11.516, 11.417, 11.419, 11.408, 11.409',
+      phone:
+      '+7 (856) 301-09-51',
+      address:
+      'ДНР, г. Донецк, ул. Артема, 131, 11-й корпус, ауд. 11.516, 11.417, 11.419, 11.408, 11.409',
       programs: [
         Program(
           code: '01.03.04',
@@ -78,11 +92,13 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Прикладная математика и кибернетика',
-              description: 'Математик-программист – одна из самых популярных профессий. Специалист занимается программированием процессов, которые невозможно смоделировать без знания математики. Основное достоинство выпускников – универсальность: они могут работать и программистами, и дизайнерами, специалистами сетевых технологий, заниматься моделированием систем и процессов, компьютерной рекламой, работать в сфере Интернет – аналитики или информационной безопасности. Специалист в области прикладной математики – это компьютерщик – аналитик, способный решать задачи независимо от сферы применения.',
+              description:
+              'Математик-программист — универсальный специалист: программирование процессов, моделирование систем, аналитика данных, безопасность и др.',
             ),
             ProgramProfile(
               name: 'Бизнес-аналитика финансовых систем',
-              description: 'Бизнес-аналитик – это высококвалифицированный специалист, который занимается анализом финансового или хозяйственного направления деятельности организации, это универсал, который может быть одновременно и исследователем, и программистом, и аналитиком. На кафедре осуществляется подготовка высококвалифицированных аналитиков, владеющих современными методами интеллектуальной обработки данных для принятия управленческих решений с использованием методов стратегического бизнес-анализа, навыками работы с большими данными, построением моделей бизнес-процессов.',
+              description:
+              'Подготовка аналитиков, владеющих методами интеллектуальной обработки данных и стратегического анализа, навыками работы с Big Data.',
             ),
           ],
         ),
@@ -95,7 +111,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Прикладная математика',
-              description: 'Углубленная подготовка магистров в области прикладной математики с фокусом на современные математические методы и их применение в различных областях науки и промышленности.',
+              description:
+              'Современные математические методы и их применение в науке и промышленности.',
             ),
           ],
         ),
@@ -108,7 +125,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Системный анализ и управление',
-              description: 'Выпускники ориентированы на работу системными аналитиками, выполняют анализ деятельности предприятия и осуществляют совершенствование бизнес-процессов; работают менеджерами проектов на предприятиях: специализируются на разработке и внедрении информационных систем; руководят IT-службами предприятий; возглавляют аналитические и плановые отделы банков, страховых компаний; консультируют по вопросам оптимизации и интеллектуализации управления производственной и финансовой деятельностью предприятий.',
+              description:
+              'Системные аналитики, менеджеры проектов, руководители IT-служб, аналитические отделы банков и страховых компаний.',
             ),
           ],
         ),
@@ -121,7 +139,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Системный анализ и управление',
-              description: 'Углубленная подготовка магистров в области системного анализа и управления сложными техническими, экономическими и социальными системами.',
+              description:
+              'Управление сложными техническими, экономическими и социальными системами.',
             ),
           ],
         ),
@@ -134,15 +153,20 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Информатика в интеллектуальных системах',
-              description: 'Профиль предусматривает подготовку в области программирования, математического и компьютерного моделирования, проектирования, разработки и использования новейших компьютерных технологий и информационных систем в различных отраслях. Студенты получают знания по разработке алгоритмического и программного обеспечения информационных систем, использованию современных прикладных программных пакетов, баз данных и знаний, защите информации, методов системного анализа, управлению предприятием, внедрению передовых интеллектуальных технологий.',
+              description:
+              'Программирование, моделирование, проектирование, разработка и использование современных ИС в разных отраслях.',
             ),
             ProgramProfile(
-              name: 'Информационные системы и программирование в промышленной инженерии',
-              description: 'Профиль открыт совместно с выпускающими кафедрами факультета металлургии и теплоэнергетики. Кафедры совместно готовят высококвалифицированных специалистов промышленной инженерии. Специалисты приобретут знания в области программирования широкого спектра информационных технологий для промышленного сегмента. Будут уметь организовывать промышленную разработку программного обеспечения, осуществлять анализ промышленных задач, с последующим гибким Agile-проектированием функциональной модели будущей системы.',
+              name:
+              'Информационные системы и программирование в промышленной инженерии',
+              description:
+              'Совместно с ФМиТЭ: промышленная разработка ПО, анализ задач, Agile-проектирование.',
             ),
             ProgramProfile(
-              name: 'Интеллектуальные технологии проектирования мехатронных машин',
-              description: 'Профиль открыт совместно с кафедрой «Горные машины». По этому профилю будут готовить высококвалифицированных специалистов, владеющих знаниями в области мехатронных машин. Выпускники будут не просто программистами, но ещё и специалистами в области проектирования и конструирования мехатронных горных машин.',
+              name:
+              'Интеллектуальные технологии проектирования мехатронных машин',
+              description:
+              'Совместно с кафедрой «Горные машины»: программирование и проектирование мехатронных машин.',
             ),
           ],
         ),
@@ -155,7 +179,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Информатика в интеллектуальных системах',
-              description: 'Углубленная подготовка магистров в области прикладной информатики с фокусом на разработку и применение интеллектуальных систем и технологий искусственного интеллекта.',
+              description:
+              'Интеллектуальные системы и технологии ИИ, разработка и применение.',
             ),
           ],
         ),
@@ -168,7 +193,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Искусственный интеллект',
-              description: 'Обучение по данному профилю предполагает освоение теоретических знаний и практических навыков, необходимых для работы программистом в области проектирования и разработки прикладного программного обеспечения и систем искусственного интеллекта. Выпускники могут выполнять следующие функции: создание, сопровождение и тестирование программного обеспечения; разработка Интернет-приложений; использование облачных вычислений; разработка моделей и структур баз знаний; разработка корпоративных и интеллектуальных систем; решение задач защиты информации; разработка приложений для промышленных и мобильных устройств.',
+              description:
+              'Проектирование и разработка ПО и систем ИИ, веб, облака, базы знаний, безопасность, промышленная и мобильная разработка.',
             ),
           ],
         ),
@@ -180,8 +206,10 @@ class _FacultyScreenState extends State<FacultyScreen> {
           form: 'Очная',
           profiles: [
             ProgramProfile(
-              name: 'Технологии программного обеспечения интеллектуальных систем',
-              description: 'Углубленная подготовка магистров в области программной инженерии с специализацией на разработке технологий программного обеспечения для интеллектуальных систем и применении методов искусственного интеллекта.',
+              name:
+              'Технологии программного обеспечения интеллектуальных систем',
+              description:
+              'Методы и технологии разработки ПО для интеллектуальных систем и применение ИИ.',
             ),
           ],
         ),
@@ -190,12 +218,15 @@ class _FacultyScreenState extends State<FacultyScreen> {
     Department(
       name: 'Кафедра программной инженерии им. Л. П. Фельдмана',
       code: 'ПИ',
-      head: 'Заведующий кафедрой программной инженерии им. Л. П. Фельдмана',
-      description: 'Кафедра «Программная инженерия» им. Л. П. Фельдмана (до 2015 г. – кафедра прикладной математики, кафедра прикладной математики и информатики) была основана в январе 1974 г. выпускниками МГУ Е. И. Харламовой и Л. П. Фельдманом. В последние годы образовательная и научная деятельность кафедры сосредоточилась на теории программирования, методах проектирования и технологиях построения больших программных систем в соответствии с международными стандартами. Специалисты по программной инженерии ориентированы на индустриальную разработку программного обеспечения для информационно-вычислительных и интеллектуальных систем различного назначения.',
+      head:
+      'Заведующий кафедрой программной инженерии им. Л. П. Фельдмана',
+      description:
+      'Кафедра основана в 1974 г. Сферы: теория программирования, методы проектирования и технологии построения больших программных систем, индустриальная разработка ПО.',
       website: 'https://kpi.fisp.donntu.ru',
       email: 'pi@donntu.ru',
-      phone: '+7 (856) 301-08-56, +7 (856) 301-07-62',
-      address: 'ДНР, г. Донецк, ул. Кобозева 15, 5-й корпус, 4 этаж, аудитория 425',
+      phone: '+7 (856) 301-08-56',
+      address:
+      'ДНР, г. Донецк, ул. Кобозева 15, 5-й корпус, 4 этаж, ауд. 425',
       programs: [
         Program(
           code: '09.03.04',
@@ -206,7 +237,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Инженерия программного обеспечения (ИПО)',
-              description: 'Специалисты по программной инженерии ориентированы на индустриальную разработку программного обеспечения для информационно-вычислительных и интеллектуальных систем различного назначения. Кафедра формирует профессиональные компетенции в методологии программирования, программной инженерии, новых парадигмах программирования, языках программирования и компиляторах, операционных системах, компьютерных сетях, параллельных и распределенных вычислениях, технологиях создания веб-приложений, гибких технологиях ООП и АОП, технологиях создания БД и СУБД, компьютерной графике и виртуальной реальности, защите программ и данных, программировании мобильных устройств, программировании интеллектуальных систем и искусственном интеллекте.',
+              description:
+              'Методология программирования, ООП/АОП, сети, распределённые вычисления, веб, БД, VR, защита программ и данных, мобильная разработка, ИИ.',
             ),
           ],
         ),
@@ -218,8 +250,10 @@ class _FacultyScreenState extends State<FacultyScreen> {
           form: 'Очная',
           profiles: [
             ProgramProfile(
-              name: 'Методы и средства разработки программного обеспечения',
-              description: 'Магистранты углубленно изучают гибкие технологии разработки программ (Agile), принципы объектно-ориентированного и агентно-ориентированного программирования, основанные на построении визуальных моделей на языках UML и Gaia с последующей автоматической генерацией программного кода. Особое внимание уделяется разработке программного обеспечения баз данных, технологиям интеллектуального анализа больших объёмов данных (Data Mining, Big Data, GRID), сетевым технологиям, созданию современных мультимедиа и гипермедиа систем, компьютерных игр, а также технологиям искусственного интеллекта - программированию нечетких систем, методам обработки изображений и распознавания образов, нейросетевым технологиям.',
+              name:
+              'Методы и средства разработки программного обеспечения',
+              description:
+              'Agile, UML/Gaia, генерация кода, БД и СУБД, Data Mining/Big Data/GRID, сетевые технологии, мультимедиа/гипермедиа, игры, ИИ (нечёткие системы, CV, распознавание, НС).',
             ),
           ],
         ),
@@ -229,11 +263,12 @@ class _FacultyScreenState extends State<FacultyScreen> {
       name: 'Кафедра философии',
       code: 'ФИЛ',
       head: 'Заведующий кафедрой философии',
-      description: 'Кафедра философии была создана в Донецком национальном техническом университете (в то время – индустриальном институте) в сентябре 1958 года. Научно-исследовательская работа традиционно посвящена изучению проблем гуманизации науки, техники, образования. В конце 90-х – начале 2000-х годов на кафедре была открыта аспирантура по специальности 09.00.01 «Социальная философия». С ноября 2014 года кафедрой руководит Т. Э. Рагозина, к. филос. н., доцент. Кафедра проводит международные научные конференции и издает научный философский журнал «Культура и цивилизация».',
+      description:
+      'Кафедра создана в 1958 году. Научная работа — гуманизация науки, техники, образования. Проводит международные конференции, издаёт журнал «Культура и цивилизация».',
       website: 'http://kf.sgi.donntu.ru',
       email: 'philosophy1958@mail.ru',
       phone: '+7 (856) 305-39-18',
-      address: 'ДНР, г. Донецк, ул. Артема, 96, 3-й корпус, аудитория 3.238',
+      address: 'ДНР, г. Донецк, ул. Артема, 96, 3-й корпус, ауд. 3.238',
       programs: [
         Program(
           code: '09.00.01',
@@ -244,7 +279,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
           profiles: [
             ProgramProfile(
               name: 'Социальная философия',
-              description: 'Подготовка научных кадров в области социальной философии. Научно-исследовательская работа посвящена изучению проблем гуманизации науки, техники, образования. Кафедра проводит международные научные конференции по темам: "Культура и духовное производство", "Формы и механизмы социально-исторической преемственности", "Субъективное и объективное в историческом процессе", "Марксизм и современность: альтернативы XXI века". Издается научный философский журнал "Культура и цивилизация", включенный в перечень рецензируемых научных изданий ВАК ДНР и наукометрическую базу РИНЦ.',
+              description:
+              'Подготовка научных кадров. Конференции по гуманитарной проблематике, журнал «Культура и цивилизация».',
             ),
           ],
         ),
@@ -252,10 +288,98 @@ class _FacultyScreenState extends State<FacultyScreen> {
     ),
   ];
 
-
   int? _expandedDepartmentIndex;
   int? _expandedProgramIndex;
   int? _expandedProfileIndex;
+
+  // ====== ЛАУНЧЕРЫ + ТОСТЫ ==================================================
+
+  Future<bool> _tryLaunch(String url) async {
+    try {
+      final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _openAddress(String address) async {
+    OverlayToast.instance.show(
+      'Открываю Яндекс.Карты…',
+      icon: Icons.map_rounded,
+      accent: AppColors.primary,
+    );
+    final ok = await _tryLaunch('https://yandex.ru/maps/?text=${Uri.encodeComponent(address)}');
+    if (!ok) {
+      OverlayToast.instance.show(
+        'Не удалось открыть Яндекс.Карты',
+        icon: Icons.error_outline_rounded,
+        accent: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _openPhone(String digits) async {
+    OverlayToast.instance.show(
+      'Открываю звонилку…',
+      icon: Icons.phone_rounded,
+      accent: Colors.green,
+    );
+    final ok = await _tryLaunch('tel:$digits');
+    if (!ok) {
+      OverlayToast.instance.show(
+        'Не удалось открыть звонилку',
+        icon: Icons.error_outline_rounded,
+        accent: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _openEmail(String email) async {
+    OverlayToast.instance.show(
+      'Открываю почту…',
+      icon: Icons.email_rounded,
+      accent: Colors.blue,
+    );
+    final ok = await _tryLaunch('mailto:$email');
+    if (!ok) {
+      OverlayToast.instance.show(
+        'Не удалось открыть почту',
+        icon: Icons.error_outline_rounded,
+        accent: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _openSite(String url) async {
+    OverlayToast.instance.show(
+      'Открываю сайт…',
+      icon: Icons.public_rounded,
+      accent: Colors.purple,
+    );
+    final ok = await _tryLaunch(url);
+    if (!ok) {
+      OverlayToast.instance.show(
+        'Не удалось открыть сайт',
+        icon: Icons.error_outline_rounded,
+        accent: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _copy(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    HapticFeedback.selectionClick();
+    OverlayToast.instance.show(
+      'Скопировано: $value',
+      icon: Icons.check_circle_rounded,
+      accent: Colors.green,
+    );
+  }
+
+
+
+  // ====== UI ================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -284,10 +408,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.primary,
-                      Color(0xFF6A11CB),
-                    ],
+                    colors: [AppColors.primary, Color(0xFF6A11CB)],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
@@ -323,9 +444,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
 
               const SizedBox(height: 24),
 
-              // Разделитель
               _buildSectionDivider(context, '📚 Кафедры факультета'),
-
               const SizedBox(height: 16),
 
               // Список кафедр
@@ -344,7 +463,10 @@ class _FacultyScreenState extends State<FacultyScreen> {
                   color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withOpacity(0.2),
                   ),
                 ),
                 child: Column(
@@ -363,7 +485,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Theme.of(context).colorScheme.onBackground,
+                        color:
+                        Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                   ],
@@ -406,7 +529,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildDepartmentCard(BuildContext context, Department department, int departmentIndex) {
+  Widget _buildDepartmentCard(
+      BuildContext context, Department department, int departmentIndex) {
     final isDepartmentExpanded = _expandedDepartmentIndex == departmentIndex;
 
     return Container(
@@ -425,11 +549,15 @@ class _FacultyScreenState extends State<FacultyScreen> {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.primary.withOpacity(.18),
+          ),
         ),
         child: InkWell(
           onTap: () {
             setState(() {
-              _expandedDepartmentIndex = isDepartmentExpanded ? null : departmentIndex;
+              _expandedDepartmentIndex =
+              isDepartmentExpanded ? null : departmentIndex;
               _expandedProgramIndex = null;
               _expandedProfileIndex = null;
             });
@@ -445,8 +573,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                  Theme.of(context).colorScheme.secondary.withOpacity(0.08),
+                  Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withOpacity(0.15),
+                  Theme.of(context)
+                      .colorScheme
+                      .secondary
+                      .withOpacity(0.08),
                 ],
               )
                   : null,
@@ -455,7 +589,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Заголовок кафедры
+                // Заголовок
                 Row(
                   children: [
                     Container(
@@ -467,10 +601,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [
-                            AppColors.primary,
-                            Color(0xFF6A11CB),
-                          ],
+                          colors: [AppColors.primary, Color(0xFF6A11CB)],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
@@ -497,19 +628,23 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onBackground,
                         ),
                       ),
                     ),
                     Icon(
-                      isDepartmentExpanded ? Icons.expand_less : Icons.expand_more,
+                      isDepartmentExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
                       color: Theme.of(context).colorScheme.primary,
                       size: 28,
                     ),
                   ],
                 ),
 
-                // Анимированное содержимое кафедры
+                // Контент
                 AnimatedCrossFade(
                   duration: const Duration(milliseconds: 300),
                   crossFadeState: isDepartmentExpanded
@@ -521,15 +656,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                     children: [
                       const SizedBox(height: 20),
 
-                      // Разделитель
                       _buildMiniDivider(context),
 
-                      // Адрес
-                      _buildInfoItem(
+                      // Адрес (кликабельный + long press для копирования)
+                      _buildInfoClickable(
                         context,
-                        '📍',
-                        'Адрес',
-                        department.address,
+                        emoji: '📍',
+                        title: 'Адрес',
+                        value: department.address,
+                        onTap: () => _openAddress(department.address),
+                        onLongPress: () => _copy(department.address),
                       ),
 
                       const SizedBox(height: 16),
@@ -544,21 +680,29 @@ class _FacultyScreenState extends State<FacultyScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Описание кафедры
+                      // Описание
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .secondary
+                                .withOpacity(0.2),
                           ),
                         ),
                         child: Text(
                           department.description,
                           style: TextStyle(
                             fontSize: 15,
-                            color: Theme.of(context).colorScheme.onBackground,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onBackground,
                             height: 1.5,
                           ),
                         ),
@@ -566,38 +710,43 @@ class _FacultyScreenState extends State<FacultyScreen> {
 
                       const SizedBox(height: 20),
 
-                      // Контакты
+                      // Контакты (кликабельные + копирование)
                       _buildContactInfo(context, department),
 
                       const SizedBox(height: 24),
 
-                      // Разделитель
                       _buildMiniDivider(context),
-
                       const SizedBox(height: 16),
 
-                      // Направления подготовки
+                      // Направления
                       Row(
                         children: [
-                          Icon(Icons.school, color: Theme.of(context).colorScheme.primary, size: 20),
+                          Icon(Icons.school,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 20),
                           const SizedBox(width: 8),
                           Text(
                             '🎯 Направления подготовки:',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onBackground,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
 
-                      ...department.programs.asMap().entries.map((entry) {
-                        final programIndex = entry.key;
-                        final program = entry.value;
-                        return _buildProgramCard(context, program, departmentIndex, programIndex);
-                      }),
+                      ...department.programs
+                          .asMap()
+                          .entries
+                          .map((entry) => _buildProgramCard(
+                          context,
+                          entry.value,
+                          departmentIndex,
+                          entry.key)),
                     ],
                   ),
                 ),
@@ -617,9 +766,11 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildProgramCard(BuildContext context, Program program, int departmentIndex, int programIndex) {
-    final isProgramExpanded = _expandedProgramIndex == programIndex &&
-        _expandedDepartmentIndex == departmentIndex;
+  Widget _buildProgramCard(BuildContext context, Program program,
+      int departmentIndex, int programIndex) {
+    final isProgramExpanded =
+        _expandedProgramIndex == programIndex &&
+            _expandedDepartmentIndex == departmentIndex;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -637,11 +788,15 @@ class _FacultyScreenState extends State<FacultyScreen> {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.primary.withOpacity(.14),
+          ),
         ),
         child: InkWell(
           onTap: () {
             setState(() {
-              _expandedProgramIndex = isProgramExpanded ? null : programIndex;
+              _expandedProgramIndex =
+              isProgramExpanded ? null : programIndex;
               _expandedProfileIndex = null;
             });
           },
@@ -655,8 +810,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Theme.of(context).colorScheme.secondary.withOpacity(0.15),
-                  Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                  Theme.of(context)
+                      .colorScheme
+                      .secondary
+                      .withOpacity(0.15),
+                  Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withOpacity(0.08),
                 ],
               )
                   : null,
@@ -673,10 +834,16 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.25),
                         ),
                       ),
                       child: Text(
@@ -684,7 +851,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
-                          color: Theme.of(context).colorScheme.primary,
+                          color:
+                          Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ),
@@ -695,19 +863,22 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onBackground,
                         ),
                       ),
                     ),
                     Icon(
-                      isProgramExpanded ? Icons.expand_less : Icons.expand_more,
+                      isProgramExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
                       color: Theme.of(context).colorScheme.primary,
                       size: 24,
                     ),
                   ],
                 ),
 
-                // Информация о программе
                 AnimatedCrossFade(
                   duration: const Duration(milliseconds: 250),
                   crossFadeState: isProgramExpanded
@@ -719,11 +890,14 @@ class _FacultyScreenState extends State<FacultyScreen> {
                     children: [
                       const SizedBox(height: 16),
 
-                      // Информация о программе в красивом контейнере
+                      // Информация
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -737,28 +911,35 @@ class _FacultyScreenState extends State<FacultyScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Профили подготовки
                       Row(
                         children: [
-                          Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
+                          Icon(Icons.auto_awesome,
+                              color: Theme.of(context).colorScheme.secondary,
+                              size: 18),
                           const SizedBox(width: 8),
                           Text(
                             '📊 Профили подготовки:',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onBackground,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
 
-                      ...program.profiles.asMap().entries.map((entry) {
-                        final profileIndex = entry.key;
-                        final profile = entry.value;
-                        return _buildProfileCard(context, profile, departmentIndex, programIndex, profileIndex);
-                      }),
+                      ...program.profiles
+                          .asMap()
+                          .entries
+                          .map((entry) => _buildProfileCard(
+                          context,
+                          entry.value,
+                          departmentIndex,
+                          programIndex,
+                          entry.key)),
                     ],
                   ),
                 ),
@@ -770,25 +951,32 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildProfileCard(BuildContext context, ProgramProfile profile, int departmentIndex, int programIndex, int profileIndex) {
-    final isProfileExpanded = _expandedProfileIndex == profileIndex &&
-        _expandedProgramIndex == programIndex &&
-        _expandedDepartmentIndex == departmentIndex;
+  Widget _buildProfileCard(
+      BuildContext context,
+      ProgramProfile profile,
+      int departmentIndex,
+      int programIndex,
+      int profileIndex) {
+    final isProfileExpanded =
+        _expandedProfileIndex == profileIndex &&
+            _expandedProgramIndex == programIndex &&
+            _expandedDepartmentIndex == departmentIndex;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+              color: Theme.of(context).colorScheme.primary.withOpacity(.12)),
         ),
         child: InkWell(
           onTap: () {
             setState(() {
-              _expandedProfileIndex = isProfileExpanded ? null : profileIndex;
+              _expandedProfileIndex =
+              isProfileExpanded ? null : profileIndex;
             });
           },
           borderRadius: BorderRadius.circular(12),
@@ -801,22 +989,23 @@ class _FacultyScreenState extends State<FacultyScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withOpacity(0.1),
                   Theme.of(context).colorScheme.surface,
                 ],
               )
                   : null,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.primary),
+                    const Icon(Icons.arrow_forward_ios,
+                        size: 14, color: AppColors.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -824,19 +1013,22 @@ class _FacultyScreenState extends State<FacultyScreen> {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onBackground,
                         ),
                       ),
                     ),
                     Icon(
-                      isProfileExpanded ? Icons.expand_less : Icons.expand_more,
+                      isProfileExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
                       color: Theme.of(context).colorScheme.primary,
                       size: 20,
                     ),
                   ],
                 ),
 
-                // Описание профиля
                 AnimatedCrossFade(
                   duration: const Duration(milliseconds: 200),
                   crossFadeState: isProfileExpanded
@@ -857,7 +1049,9 @@ class _FacultyScreenState extends State<FacultyScreen> {
                           profile.description,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Theme.of(context).colorScheme.onBackground,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onBackground,
                             height: 1.4,
                           ),
                         ),
@@ -873,7 +1067,10 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildInfoItem(BuildContext context, String emoji, String title, String value) {
+  // ——— Блоки информации ———
+
+  Widget _buildInfoItem(
+      BuildContext context, String emoji, String title, String value) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -886,10 +1083,7 @@ class _FacultyScreenState extends State<FacultyScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 20),
-          ),
+          Text(emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -919,7 +1113,27 @@ class _FacultyScreenState extends State<FacultyScreen> {
     );
   }
 
-  Widget _buildContactInfo(BuildContext context, Department department) {
+  // Кликабельная версия (адрес)
+  Widget _buildInfoClickable(
+      BuildContext context, {
+        required String emoji,
+        required String title,
+        required String value,
+        VoidCallback? onTap,
+        VoidCallback? onLongPress,
+      }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: _buildInfoItem(context, emoji, title, value),
+      ),
+    );
+  }
+
+  Widget _buildContactInfo(BuildContext context, Department d) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -934,7 +1148,8 @@ class _FacultyScreenState extends State<FacultyScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.contacts, color: Theme.of(context).colorScheme.primary, size: 18),
+              Icon(Icons.contacts,
+                  color: Theme.of(context).colorScheme.primary, size: 18),
               const SizedBox(width: 8),
               Text(
                 '📞 Контакты:',
@@ -947,65 +1162,112 @@ class _FacultyScreenState extends State<FacultyScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildContactRow(context, '📱', department.phone),
+
+          // Телефон
+          _buildContactRow(
+            context,
+            emoji: '📱',
+            text: d.phone,
+            onTap: () {
+              // если несколько телефонов — копируем все, и предлагаем нажать на конкретный вручную
+              _copy(d.phone);
+            },
+            onLongPress: () => _copy(d.phone),
+          ),
           const SizedBox(height: 8),
-          _buildContactRow(context, '📧', department.email),
+
+          // E-mail
+          _buildContactRow(
+            context,
+            emoji: '📧',
+            text: d.email,
+            onTap: () => _openEmail(d.email),
+            onLongPress: () => _copy(d.email),
+          ),
           const SizedBox(height: 8),
-          _buildContactRow(context, '🌐', department.website),
+
+          // Сайт
+          _buildContactRow(
+            context,
+            emoji: '🌐',
+            text: d.website,
+            onTap: () => _openSite(d.website),
+            onLongPress: () => _copy(d.website),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildContactRow(BuildContext context, String emoji, String text) {
-    return Row(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Theme.of(context).colorScheme.onBackground,
+  Widget _buildContactRow(
+      BuildContext context, {
+        required String emoji,
+        required String text,
+        VoidCallback? onTap,
+        VoidCallback? onLongPress,
+      }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onBackground,
+                  decoration: onTap != null
+                      ? TextDecoration.none
+                      : TextDecoration.none,
+                ),
+              ),
             ),
-          ),
+            if (onTap != null)
+              Icon(Icons.open_in_new_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.primary),
+          ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildInfoRow(BuildContext context, String label, String value) {
+    final scheme = Theme.of(context).colorScheme;
+    final labelStyle = TextStyle(
+      fontWeight: FontWeight.w600,
+      color: scheme.onBackground,
+      fontSize: 14,
+    );
+    final valueStyle = TextStyle(
+      fontWeight: FontWeight.w400,
+      color: scheme.onBackground,
+      fontSize: 14,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onBackground,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onBackground,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ],
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: label.endsWith(':') ? label : '$label:', style: labelStyle),
+            const TextSpan(text: '\u00A0'), // НЕпереносимый пробел
+            TextSpan(text: value, style: valueStyle),
+          ],
+        ),
+        softWrap: true,
       ),
     );
   }
+
 }
+
+// ====== МОДЕЛИ ===============================================================
 
 class Department {
   final String name;

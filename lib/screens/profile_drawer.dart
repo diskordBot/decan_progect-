@@ -11,8 +11,10 @@ import 'package:decanat_progect/utils/auth_hint_bus.dart';
 import 'package:decanat_progect/student/student_auth_screen.dart';
 import 'package:decanat_progect/teacher/teacher_auth_screen.dart';
 import 'dart:async';
+import 'package:decanat_progect/screens/profile_screen.dart';
 
-
+// 👇 кастомные тосты
+import 'package:decanat_progect/ui/overlay_toast.dart';
 
 /// Красивая выдвижная панель профиля
 class ProfileDrawer extends StatelessWidget {
@@ -30,6 +32,7 @@ class ProfileDrawer extends StatelessWidget {
   /// Колбэк, чтобы немедленно обновить HomeScreen (роль/ID)
   final void Function({required String role, required String? userId})? onUserDataChanged;
 
+  /// Внешний способ показать тост (не обязателен)
   final void Function(String message)? showSnackBar;
 
   const ProfileDrawer({
@@ -50,6 +53,22 @@ class ProfileDrawer extends StatelessWidget {
   bool get _isAdminOrDeveloper => userRole == 'admin' || userRole == 'developer';
   bool get _isRegistered => userRole == 'student' || userRole == 'teacher';
   bool get _isDeveloper => userRole == 'developer';
+
+  void _toastInfo(String msg) {
+    if (showSnackBar != null) {
+      showSnackBar!(msg);
+    } else {
+      OverlayToast.instance.info(msg, position: ToastPosition.top);
+    }
+  }
+
+  void _toastError(String msg) {
+    if (showSnackBar != null) {
+      showSnackBar!(msg);
+    } else {
+      OverlayToast.instance.error(msg, position: ToastPosition.top);
+    }
+  }
 
   // -------------------- API --------------------
   Future<Map<String, dynamic>?> _fetchStudent(String uid) async {
@@ -82,27 +101,6 @@ class ProfileDrawer extends StatelessWidget {
         };
       }
     } catch (_) {}
-
-    try {
-      final all = Uri.parse('$serverUrl/api/users');
-      final r2 = await http.get(all).timeout(const Duration(seconds: 8));
-      if (r2.statusCode == 200) {
-        final list = json.decode(r2.body) as List<dynamic>;
-        final match = list.cast<Map<String, dynamic>>().firstWhere(
-              (u) => (u['user_id']?.toString() ?? '') == uid,
-          orElse: () => {},
-        );
-        if (match.isNotEmpty) {
-          return {
-            'full_name': match['full_name'],
-            'department': match['department'],
-            'position': match['position'],
-            'login': match['login'],
-          };
-        }
-      }
-    } catch (_) {}
-
     return null;
   }
 
@@ -113,6 +111,32 @@ class ProfileDrawer extends StatelessWidget {
     if (userRole == 'teacher') return _fetchTeacher(uid);
     return null;
   }
+
+  // === проверка статуса группы студента ============
+  Future<String?> _checkStudentGroupRemoved() async {
+    if (userRole != 'student') return null;
+    final uid = userId;
+    if (uid == null || uid.isEmpty) return null;
+
+    try {
+      final p = await _fetchStudent(uid);
+      final group = p?['group_name']?.toString().trim();
+      if (group == null || group.isEmpty) return null;
+
+      final uri = Uri.parse('$serverUrl/api/groups');
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return null;
+
+      final list = (json.decode(resp.body) as List).map((e) => e.toString()).toList();
+      if (!list.contains(group)) {
+        return group;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+  // ================================================
 
   // -------------------- Role helpers --------------------
   Color _roleColor() {
@@ -184,21 +208,12 @@ class ProfileDrawer extends StatelessWidget {
   Future<void> _copyId(BuildContext context) async {
     if (userId == null || userId!.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: userId!));
-    (showSnackBar != null)
-        ? showSnackBar!("ID скопирован")
-        : ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ID скопирован')),
-    );
+    _toastInfo('ID скопирован');
   }
 
-  /// Изменять ID может только разработчик (доп. защита в рантайме)
   Future<void> _editId(BuildContext context) async {
     if (!_isDeveloper) {
-      (showSnackBar != null)
-          ? showSnackBar!("Только разработчик может изменять ID")
-          : ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Только разработчик может изменять ID')),
-      );
+      _toastError('Только разработчик может изменять ID');
       return;
     }
 
@@ -255,11 +270,7 @@ class ProfileDrawer extends StatelessWidget {
 
                   onUserDataChanged?.call(role: role, userId: newId);
 
-                  (showSnackBar != null)
-                      ? showSnackBar!("ID сохранён")
-                      : ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('ID сохранён')),
-                  );
+                  _toastInfo('ID сохранён');
                   Navigator.pop(ctx);
                 },
                 child: const Text('Сохранить'),
@@ -290,23 +301,17 @@ class ProfileDrawer extends StatelessWidget {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getString('userId') ?? userId;
     if (id == null || id.isEmpty) {
-      (showSnackBar != null)
-          ? showSnackBar!("ID не задан")
-          : ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('ID не задан')));
+      _toastError('ID не задан');
       return;
     }
     final role = await _fetchRoleById(id) ?? 'user';
     await prefs.setString('userRole', role);
     onUserDataChanged?.call(role: role, userId: id);
 
-    (showSnackBar != null)
-        ? showSnackBar!("Данные обновлены")
-        : ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Данные обновлены')));
+    _toastInfo('Данные обновлены');
   }
 
-  // -------------------- Logout (ID НЕ ТРОГАЕМ) --------------------
+  // -------------------- Logout --------------------
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -318,10 +323,7 @@ class ProfileDrawer extends StatelessWidget {
     await prefs.setString('userRole', 'user');
     onUserDataChanged?.call(role: 'user', userId: currentId);
 
-    (showSnackBar != null)
-        ? showSnackBar!("Вы вышли из аккаунта")
-        : ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Вы вышли из аккаунта')));
+    _toastInfo('Вы вышли из аккаунта');
 
     Navigator.of(context).maybePop();
   }
@@ -474,7 +476,7 @@ class ProfileDrawer extends StatelessWidget {
                       dotColor: rc,
                       onCopy: () => _copyId(context),
                       onEdit: () => _editId(context),
-                      canEdit: _isDeveloper, // ← только разработчик увидит кнопку
+                      canEdit: _isDeveloper,
                     ),
                     const SizedBox(height: 12),
 
@@ -527,6 +529,16 @@ class ProfileDrawer extends StatelessWidget {
     ].where((s) => s.trim().isNotEmpty).join(' • ');
 
     final initials = _initials(title);
+
+    // 👇 сохраняем ФИО препода в SharedPreferences (чтобы журнал/расписание брало оттуда)
+    if (userRole == 'teacher' && (title ?? '').isNotEmpty) {
+      Future.microtask(() async {
+        final prefs = await SharedPreferences.getInstance();
+        // удобные ключи для клиента
+        await prefs.setString('teacherFullName', title!);
+        await prefs.setString('selectedTeacher', title);
+      });
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
@@ -586,7 +598,7 @@ class ProfileDrawer extends StatelessWidget {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   child: Column(
-                    key: ValueKey(title ?? ''),
+                    key: ValueKey(title ?? '' ),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (title != null && title.isNotEmpty)
@@ -652,6 +664,62 @@ class ProfileDrawer extends StatelessWidget {
         }
         return _buildProfileCard(context, data);
       },
+    );
+  }
+
+  // -------------------- UI: Banner (group removed) --------------------
+  Widget _buildGroupRemovedBanner(BuildContext context, String groupName) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.orange.withOpacity(.45)),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_rounded, color: Colors.orange),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Ваша группа $groupName закончила обучение. '
+                          'Вы можете выбрать другую группу в профиле.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 13.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context, rootNavigator: true).push(
+                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                      );
+                    },
+                    child: const Text('Выбрать'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -725,8 +793,13 @@ class ProfileDrawer extends StatelessWidget {
                       const _SectionLabel(text: 'Профиль'),
                       _ActionTile(
                         leadingIcon: Icons.person_outline_rounded,
-                        title: 'Открыть профиль (бета)',
-                        onTap: () => Navigator.pop(context),
+                        title: 'Открыть профиль',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context, rootNavigator: true).push(
+                            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                          );
+                        },
                       ),
                     ],
 
@@ -766,6 +839,20 @@ class ProfileDrawer extends StatelessWidget {
                           } else {
                             onOpenAdminPanel?.call();
                           }
+                        },
+                      ),
+
+                    // баннер: группа удалена
+                    if (userRole == 'student')
+                      FutureBuilder<String?>(
+                        future: _checkStudentGroupRemoved(),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const SizedBox.shrink();
+                          }
+                          final removedGroup = snap.data;
+                          if (removedGroup == null) return const SizedBox.shrink();
+                          return _buildGroupRemovedBanner(context, removedGroup);
                         },
                       ),
                   ],
@@ -1385,7 +1472,6 @@ class _ActionTile extends StatelessWidget {
 }
 
 /// Плавная подсветка/мигание на основе интенсивности [0..1].
-/// Добавляет мягкую тень и небольшое повышение непрозрачности.
 class _HintGlow extends StatelessWidget {
   final double intensity; // 0..1
   final Widget child;

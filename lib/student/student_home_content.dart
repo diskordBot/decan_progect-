@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:decanat_progect/widgets/bubble_button.dart';
 import 'package:decanat_progect/screens/department_detail_screen.dart';
 import 'package:decanat_progect/screens/webview_screen.dart';
-import 'package:decanat_progect/student/student_auth_screen.dart'; // новый импорт
 
 class StudentHomeContent extends StatefulWidget {
   const StudentHomeContent({super.key});
@@ -76,104 +75,6 @@ class _StudentHomeContentState extends State<StudentHomeContent> {
     );
   }
 
-  Widget _buildAuthButtons() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          Icons.school,
-          size: 64,
-          color: Colors.grey[400],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Доступ только для студентов',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[600],
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Войдите или зарегистрируйтесь,\nчтобы получить доступ к функции студента',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[500],
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 30),
-
-        // Кнопка Войти
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => StudentAuthScreen(isLogin: true),
-                ),
-              ).then((success) {
-                if (success == true) {
-                  // Обновляем роль после успешной авторизации
-                  _loadUserRole();
-                }
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Войти',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Кнопка Зарегистрироваться
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => StudentAuthScreen(isLogin: false),
-                ),
-              ).then((success) {
-                if (success == true) {
-                  // Обновляем роль после успешной регистрации
-                  _loadUserRole();
-                }
-              });
-            },
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.green[50],
-              foregroundColor: Colors.green[700],
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              side: BorderSide(color: Colors.green[700]!),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Зарегистрироваться',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +85,7 @@ class _StudentHomeContentState extends State<StudentHomeContent> {
     } else {
       return Padding(
         padding: const EdgeInsets.all(20.0),
-        child: _buildAuthButtons(),
+        child: _buildStudentContent(),
       );
     }
   }

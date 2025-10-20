@@ -19,6 +19,9 @@ import 'package:decanat_progect/utils/server_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import "package:package_info_plus/package_info_plus.dart";
 
+// 👇 добавили твои кастомные тосты
+import 'package:decanat_progect/ui/overlay_toast.dart';
+
 /// Если на сервере ADMIN_API_KEY пуст/не задан — оставляем null.
 const String? kAdminApiKey = null; // например: 'supersecret';
 
@@ -100,6 +103,15 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
+  // ======== Вспомогательные обёртки под твой OverlayToast ========
+  void _toastInfo(String message) {
+    OverlayToast.instance.info(message, position: ToastPosition.top);
+  }
+
+  void _toastError(String message) {
+    OverlayToast.instance.error(message, position: ToastPosition.top);
+  }
+
   // ======== АВТООБНОВЛЕНИЕ СЕГОДНЯШНЕЙ ПАНЕЛИ ========
   void _startTodayTimer() {
     _todayTimer?.cancel();
@@ -152,16 +164,18 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
     setState(() => _refreshNonce++);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Данные обновлены')),
-      );
+      _toastInfo('Данные обновлены');
     }
   }
 
   // --------------------------------------------------------------------------
   Future<void> _checkServerConnection() async {
     final ok = await pingServer(AppConfig.serverUrl);
-    _showSnackBar(ok ? 'Сервер доступен ✓' : 'Сервер недоступен ✗');
+    if (ok) {
+      _toastInfo('Сервер доступен ✓');
+    } else {
+      _toastError('Сервер недоступен ✗');
+    }
   }
 
   void refreshUserRole() => _loadUserRole();
@@ -389,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen>
                         try {
                           await launchUrl(uri, mode: LaunchMode.externalApplication);
                         } catch (_) {
-                          _showSnackBar('Не удалось открыть ссылку');
+                          _toastError('Не удалось открыть ссылку');
                         }
                       },
                       icon: const Icon(Icons.system_update_alt_rounded, size: 22),
@@ -679,8 +693,7 @@ class _HomeScreenState extends State<HomeScreen>
         '${mon.year.toString().padLeft(4, '0')}-'
             '${mon.month.toString().padLeft(2, '0')}-'
             '${mon.day.toString().padLeft(2, '0')}');
-    _showSnackBar(
-        'Базовая неделя: ${newType == "upper" ? "Верхняя" : "Нижняя"} (с текущего понедельника)');
+    _toastInfo('Базовая неделя: ${newType == "upper" ? "Верхняя" : "Нижняя"} (с текущего понедельника)');
     if (mounted) setState(() {});
   }
 
@@ -1296,7 +1309,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _updateUserRole(String userId, String newRole) async {
     if (_userRole != 'developer') {
-      _showSnackBar('Только разработчики могут изменять роли');
+      _toastError('Только разработчики могут изменять роли');
       return;
     }
     try {
@@ -1306,20 +1319,13 @@ class _HomeScreenState extends State<HomeScreen>
         body: json.encode({'user_id': userId, 'role': newRole}),
       );
       if (response.statusCode == 200) {
-        _showSnackBar('Роль пользователя обновлена');
+        _toastInfo('Роль пользователя обновлена');
       } else {
-        _showSnackBar('Ошибка обновления роли');
+        _toastError('Ошибка обновления роли');
       }
     } catch (e) {
-      _showSnackBar('Ошибка сети: $e');
+      _toastError('Ошибка сети: $e');
     }
-  }
-
-  void _showSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
   }
 
   // ---- BottomSheet «Инструменты разработчика»
@@ -1648,10 +1654,10 @@ class _HomeScreenState extends State<HomeScreen>
                               if (mounted) {
                                 setState(() => _updateNotice = null);
                                 Navigator.pop(ctx);
-                                _showSnackBar('Уведомление очищено (глобально)');
+                                _toastInfo('Уведомление очищено (глобально)');
                               }
                             } catch (e) {
-                              _showSnackBar('Ошибка удаления: $e');
+                              _toastError('Ошибка удаления: $e');
                             }
                           },
                           child: const Icon(Icons.delete_forever),
@@ -1677,7 +1683,7 @@ class _HomeScreenState extends State<HomeScreen>
                           final target = targetVersionCtrl.text.trim();
 
                           if (title.isEmpty || link.isEmpty || target.isEmpty) {
-                            _showSnackBar('Заполните тему, ссылку и целевую версию');
+                            _toastError('Заполните тему, ссылку и целевую версию');
                             return;
                           }
 
@@ -1694,10 +1700,10 @@ class _HomeScreenState extends State<HomeScreen>
                             if (mounted) {
                               setState(() => _updateNotice = notice);
                               Navigator.pop(ctx);
-                              _showSnackBar('Уведомление опубликовано (глобально)');
+                              _toastInfo('Уведомление опубликовано (глобально)');
                             }
                           } catch (e) {
-                            _showSnackBar('Ошибка публикации: $e');
+                            _toastError('Ошибка публикации: $e');
                           }
                         },
                       ),
@@ -1768,7 +1774,7 @@ class _HomeScreenState extends State<HomeScreen>
                   _updateUserRole(userId, role);
                   Navigator.pop(context);
                 } else {
-                  _showSnackBar('Введите ID пользователя');
+                  _toastError('Введите ID пользователя');
                 }
               },
               child: Text('Назначить $roleName'),
@@ -1808,7 +1814,7 @@ class _HomeScreenState extends State<HomeScreen>
                   _updateUserRole(userId, 'user');
                   Navigator.pop(context);
                 } else {
-                  _showSnackBar('Введите ID пользователя');
+                  _toastError('Введите ID пользователя');
                 }
               },
               child: const Text('Снять права'),
@@ -1905,7 +1911,8 @@ class _HomeScreenState extends State<HomeScreen>
           );
           _refreshTodayPanels();
         },
-        showSnackBar: _showSnackBar,
+        // 👇 пробрасываем тост как showSnackBar
+        showSnackBar: (msg) => OverlayToast.instance.info(msg, position: ToastPosition.top),
         onUserDataChanged: ({required String role, required String? userId}) {
           if (!mounted) return;
           setState(() {

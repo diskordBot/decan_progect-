@@ -1,15 +1,16 @@
+// lib/screens/settings_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'package:decanat_progect/constants.dart';
 import 'package:decanat_progect/widgets/custom_app_bar.dart';
 import 'package:decanat_progect/theme_controller.dart';
 import 'package:decanat_progect/notifications/notification_service.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:decanat_progect/ui/overlay_toast.dart'; // ToastStyle + OverlayToast
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,56 +19,58 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _notificationsEnabled = true;
-  bool _vibrationEnabled = true;
   bool _isLoading = true;
 
+  // уведомления
+  bool _notificationsEnabled = true;
+  bool _vibrationEnabled = true;
+
+  // тема
   String _themeOption = 'Системная';
-  String? _userId;
-  String _appVersion = ''; // 🔹 версия приложения
+
+  // версия
+  String _appVersion = '';
+
+  // стиль тостов
+  ToastStyle _toastStyle = ToastStyle.redFrame;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-    _loadAppVersion(); // загрузка версии
+    _initSafe();
   }
 
-  // ----------------- Data -----------------
-  Future<void> _ensureUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    _userId = prefs.getString('userId');
-    if (_userId == null) {
-      _userId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
-      await prefs.setString('userId', _userId!);
+  Future<void> _initSafe() async {
+    try {
+      await Future.wait([
+        _loadSettings(),
+        _loadAppVersion(),
+      ]);
+      // стиль тостов — читаем из OverlayToast (он поднимается в main)
+      _toastStyle = OverlayToast.instance.style;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+
+      // Синхронизацию FCM запускаем уже после снятия спиннера и не ждём
+      _syncFcmSubscription(_notificationsEnabled)
+          .timeout(const Duration(seconds: 2))
+          .catchError((_) {});
     }
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await _ensureUserId();
-
     setState(() {
       _notificationsEnabled = prefs.getBool('notifications') ?? true;
       _vibrationEnabled = prefs.getBool('vibration') ?? true;
       _themeOption = _themeModeToText(ThemeController.instance.themeMode);
-      _isLoading = false;
     });
-
-    await _syncFcmSubscription(_notificationsEnabled);
   }
 
-  // 🔹 Получаем версию из build.gradle.kts
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
-    setState(() {
-      _appVersion = info.version; // только версия, без build number
-    });
-  }
-
-  Future<void> _saveSetting(String key, dynamic value) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (value is bool) await prefs.setBool(key, value);
+    if (!mounted) return;
+    setState(() => _appVersion = info.version);
   }
 
   // ----------------- Theme helpers -----------------
@@ -82,42 +85,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _applyTheme(String option) async {
     await ThemeController.instance.setThemeMode(_textToThemeMode(option));
+    if (!mounted) return;
     setState(() => _themeOption = option);
+
+    OverlayToast.instance.show(
+      'Тема: $option',
+      icon: Icons.brightness_6_rounded,
+      accent: AppColors.accent,
+    );
   }
 
   // ----------------- FCM helpers -----------------
   Future<void> _syncFcmSubscription(bool enabled) async {
     try {
       if (enabled) {
-        await FirebaseMessaging.instance.requestPermission(
-          alert: true, badge: true, sound: true,
-        );
-        await FirebaseMessaging.instance.subscribeToTopic('news');
+        await FirebaseMessaging.instance
+            .requestPermission(alert: true, badge: true, sound: true)
+            .timeout(const Duration(seconds: 2));
+        await FirebaseMessaging.instance
+            .subscribeToTopic('news')
+            .timeout(const Duration(seconds: 2));
       } else {
-        await FirebaseMessaging.instance.unsubscribeFromTopic('news');
+        await FirebaseMessaging.instance
+            .unsubscribeFromTopic('news')
+            .timeout(const Duration(seconds: 2));
       }
-    } catch (_) {}
+    } catch (_) {
+      // тихо игнорируем
+    }
+  }
+
+  Future<void> _savePref(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
+
+  Future<void> _updateSetting(String key, bool value) async {
+    setState(() {
+      if (key == 'notifications') _notificationsEnabled = value;
+      if (key == 'vibration') _vibrationEnabled = value;
+    });
+    await _savePref(key, value);
+
+    if (key == 'notifications') {
+      _syncFcmSubscription(value).timeout(const Duration(seconds: 2)).catchError((_) {});
+      OverlayToast.instance.show(
+        value ? 'Уведомления включены' : 'Уведомления выключены',
+        icon: value ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+        accent: AppColors.accent,
+      );
+    }
+
+    if (key == 'vibration') {
+      try {
+        await NotificationService.instance.setVibrationEnabled(value);
+      } catch (_) {}
+      OverlayToast.instance.show(
+        value ? 'Вибрация включена' : 'Вибрация выключена',
+        icon: Icons.vibration_rounded,
+        accent: AppColors.accent,
+      );
+    }
   }
 
   // ----------------- Contact helpers -----------------
   Future<void> _openEmail() async {
     final uri = Uri(scheme: 'mailto', path: 'vlad14g@vk.com');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть почтовое приложение')),
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      OverlayToast.instance.show(
+        'Не удалось открыть почтовое приложение',
+        icon: Icons.warning_amber_rounded,
+        accent: AppColors.accent,
       );
     }
   }
 
   Future<void> _openTelegram() async {
     final uri = Uri.parse('https://t.me/HomeScreenPY');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть Telegram')),
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      OverlayToast.instance.show(
+        'Не удалось открыть Telegram',
+        icon: Icons.warning_amber_rounded,
+        accent: AppColors.accent,
       );
     }
+  }
+
+  // ----------------- Toast style -----------------
+  Future<void> _setToastStyle(ToastStyle style) async {
+    await OverlayToast.instance.setStyle(style);
+    if (!mounted) return;
+    setState(() => _toastStyle = style);
+
+    final previewIcon = switch (style) {
+      ToastStyle.redFrame => Icons.emergency_rounded,
+      ToastStyle.glass => Icons.blur_on_rounded,
+      ToastStyle.minimal => Icons.radio_button_checked_rounded,
+    };
+    final name = switch (style) {
+      ToastStyle.redFrame => 'Рамка',
+      ToastStyle.glass => 'Стекло',
+      ToastStyle.minimal => 'Минимальный',
+    };
+
+    OverlayToast.instance.show(
+      'Стиль уведомлений: $name',
+      icon: previewIcon,
+      accent: AppColors.accent, // рамка у redFrame всегда красная, как просил
+    );
   }
 
   // ----------------- UI -----------------
@@ -131,6 +208,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       appBar: const CustomAppBar(title: 'Настройки', showBackButton: false),
@@ -141,35 +220,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _ThemeSimpleToggle(
             index: _themeToIndex(_themeOption),
-            onChanged: (i) async => _applyTheme(_indexToTheme(i)),
+            onChanged: (i) => _applyTheme(_indexToTheme(i)),
           ),
 
           const SizedBox(height: 16),
           _sectionHeader('УВЕДОМЛЕНИЯ'),
           const SizedBox(height: 8),
-          _switchTile('Уведомления', _notificationsEnabled,
-                  (v) => _updateSetting('notifications', v), Icons.notifications),
-          _switchTile('Вибрация', _vibrationEnabled,
-                  (v) => _updateSetting('vibration', v), Icons.vibration),
+          _switchTile(
+            context,
+            title: 'Уведомления',
+            value: _notificationsEnabled,
+            icon: Icons.notifications,
+            onChanged: (v) => _updateSetting('notifications', v),
+          ),
+          _switchTile(
+            context,
+            title: 'Вибрация',
+            value: _vibrationEnabled,
+            icon: Icons.vibration,
+            onChanged: (v) => _updateSetting('vibration', v),
+          ),
+
+          const SizedBox(height: 16),
+          _sectionHeader('СТИЛЬ ВСПЛЫВАЮЩИХ УВЕДОМЛЕНИЙ'),
+          const SizedBox(height: 8),
+          _toastStyleChips(context),
 
           const SizedBox(height: 16),
           _sectionHeader('О ПРИЛОЖЕНИИ'),
           const SizedBox(height: 8),
-
-          // 🔹 Автоматически подтягиваемая версия
           _infoTile(
-            'Версия приложения',
-            _appVersion.isEmpty ? 'Загрузка...' : _appVersion,
-            Icons.info,
+            context,
+            title: 'Версия приложения',
+            value: _appVersion.isEmpty ? 'Загрузка...' : _appVersion,
+            icon: Icons.info,
           ),
-
           _infoTile(
-            'Разработчики',
-            "Группа ИНФ-24\n"
-                '• Галушка Владислав Романович\n'
-                '• Бушлаков Олег Михайлович\n'
-                'Факультет интеллектуальных систем и программирования, ДонНТУ',
-            Icons.code,
+            context,
+            title: 'Разработчики',
+            value: "Группа ИНФ-24\n"
+                "• Галушка Владислав Романович\n"
+                "• Бушлаков Олег Михайлович\n"
+                "Факультет интеллектуальных систем и программирования, ДонНТУ",
+            icon: Icons.code,
           ),
 
           const SizedBox(height: 20),
@@ -188,16 +281,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface,
+                      color: scheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'Свяжитесь с разработчиком:',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -205,9 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _openEmail,
-                          icon: Icon(Icons.email_outlined,
-                              size: 18,
-                              color: AppColors.secondary.withOpacity(.85)),
+                          icon: Icon(Icons.email_outlined, size: 18, color: AppColors.secondary.withOpacity(.85)),
                           label: Text(
                             'Написать на почту',
                             style: TextStyle(
@@ -218,13 +306,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(
-                              color: AppColors.secondary.withOpacity(.35),
-                              width: 1.2,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            side: BorderSide(color: AppColors.secondary.withOpacity(.35), width: 1.2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                       ),
@@ -232,9 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _openTelegram,
-                          icon: Icon(Icons.send_rounded,
-                              size: 18,
-                              color: AppColors.secondary.withOpacity(.85)),
+                          icon: Icon(Icons.send_rounded, size: 18, color: AppColors.secondary.withOpacity(.85)),
                           label: Text(
                             'Telegram',
                             style: TextStyle(
@@ -245,13 +326,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(
-                              color: AppColors.secondary.withOpacity(.35),
-                              width: 1.2,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            side: BorderSide(color: AppColors.secondary.withOpacity(.35), width: 1.2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                       ),
@@ -263,12 +339,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
           const SizedBox(height: 24),
-          _actionBtn('Сброс настроек', Icons.restart_alt, _resetSettings),
+          _actionBtn(
+            context,
+            text: 'Сброс настроек',
+            icon: Icons.restart_alt,
+            onPressed: _resetSettings,
+          ),
         ],
       ),
     );
   }
 
+  // ----------------- UI helpers -----------------
   Widget _sectionHeader(String t) => Text(
     t,
     style: TextStyle(
@@ -279,95 +361,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
   );
 
-  Widget _switchTile(String title, bool value, Function(bool) onChanged, IconData icon) => Card(
-    elevation: 1,
-    margin: const EdgeInsets.only(bottom: 8),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    child: ListTile(
-      leading: Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
-      trailing: Switch(value: value, onChanged: onChanged, activeColor: AppColors.primary),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    ),
-  );
-
-  Widget _infoTile(String title, String value, IconData icon) => Card(
-    elevation: 1,
-    margin: const EdgeInsets.only(bottom: 8),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    child: ListTile(
-      leading: Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
-      subtitle: Text(value, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    ),
-  );
-
-  Widget _actionBtn(String text, IconData icon, VoidCallback onPressed) => ElevatedButton.icon(
-    icon: Icon(icon, size: 20),
-    label: Text(text, style: const TextStyle(fontSize: 15)),
-    onPressed: onPressed,
-    style: ElevatedButton.styleFrom(
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  Widget _switchTile(
+      BuildContext context, {
+        required String title,
+        required bool value,
+        required IconData icon,
+        required ValueChanged<bool> onChanged,
+      }) {
+    return Card(
       elevation: 1,
-    ),
-  );
-
-  Future<void> _updateSetting(String key, bool value) async {
-    setState(() {
-      if (key == 'notifications') _notificationsEnabled = value;
-      if (key == 'vibration') _vibrationEnabled = value;
-    });
-
-    await _saveSetting(key, value);
-
-    if (key == 'notifications') {
-      await _syncFcmSubscription(value);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(value ? 'Уведомления включены' : 'Уведомления выключены')),
-      );
-    }
-
-    if (key == 'vibration') {
-      try {
-        await NotificationService.instance.setVibrationEnabled(value);
-      } catch (_) {}
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(value ? 'Вибрация включена' : 'Вибрация выключена')),
-      );
-    }
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: ListTile(
+        leading: Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+        ),
+        trailing: Switch(value: value, onChanged: onChanged, activeColor: AppColors.primary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+    );
   }
 
+  Widget _infoTile(
+      BuildContext context, {
+        required String title,
+        required String value,
+        required IconData icon,
+      }) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: ListTile(
+        leading: Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+        ),
+        subtitle: Text(value, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+    );
+  }
+
+  Widget _actionBtn(BuildContext context,
+      {required String text, required IconData icon, required VoidCallback onPressed}) {
+    return ElevatedButton.icon(
+      icon: Icon(icon, size: 20),
+      label: Text(text, style: const TextStyle(fontSize: 15)),
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 1,
+      ),
+    );
+  }
+
+  // ----------------- Минималистичный выбор стиля тостов -----------------
+  Widget _toastStyleChips(BuildContext context) {
+    final entries = <({ToastStyle style, String label, IconData icon})>[
+      (style: ToastStyle.redFrame, label: 'Рамка', icon: Icons.flip_rounded),
+      (style: ToastStyle.glass, label: 'Стекло', icon: Icons.blur_on_rounded),
+      (style: ToastStyle.minimal, label: 'Минимал', icon: Icons.radio_button_checked_rounded),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: entries.map((e) {
+        final selected = _toastStyle == e.style;
+        return ChoiceChip(
+          selected: selected,
+          onSelected: (_) => _setToastStyle(e.style),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(e.icon, size: 16, color: selected ? Colors.white : Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 6),
+              Text(e.label),
+            ],
+          ),
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).dividerColor,
+              width: 1.1,
+            ),
+          ),
+          labelStyle: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+          ),
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          selectedColor: Theme.of(context).colorScheme.primary,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+        );
+      }).toList(),
+    );
+  }
+
+  // ----------------- Reset -----------------
   void _resetSettings() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Сброс настроек'),
-        content: const Text('Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?'),
+        content: const Text('Сбросить все настройки к значениям по умолчанию?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
           TextButton(
             onPressed: () async {
+              // тема
+              await ThemeController.instance.setThemeMode(ThemeMode.system);
+              // prefs
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('notifications');
+              await prefs.remove('vibration');
+              // локально
               setState(() {
                 _notificationsEnabled = true;
                 _vibrationEnabled = true;
                 _themeOption = 'Системная';
+                _toastStyle = ToastStyle.redFrame;
               });
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('notifications');
-              await prefs.remove('vibration');
+              // стиль тостов → дефолт
+              await OverlayToast.instance.setStyle(ToastStyle.redFrame);
+              // уведомления
+              _syncFcmSubscription(true).timeout(const Duration(seconds: 2)).catchError((_) {});
 
-              await ThemeController.instance.setThemeMode(ThemeMode.system);
-              await _syncFcmSubscription(true);
               if (mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Настройки сброшены')));
+              OverlayToast.instance.show(
+                'Настройки сброшены',
+                icon: Icons.check_circle_rounded,
+                accent: AppColors.accent,
+              );
             },
             child: const Text('Сбросить', style: TextStyle(color: Colors.red)),
           ),
@@ -378,7 +512,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-// ----------------- Виджет выбора темы -----------------
+// ----------------- Виджет выбора темы (как было, аккуратно) -----------------
 class _ThemeSimpleToggle extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
